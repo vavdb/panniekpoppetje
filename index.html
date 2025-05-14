@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Paniekpoppetje</title>
+  <style>
+    body {
+      margin: 0;
+      background-color: #f9f3e9;
+      background-image: 
+        radial-gradient(rgba(0,0,0,0.02) 1px, transparent 0),
+        radial-gradient(rgba(0,0,0,0.02) 1px, transparent 0);
+      background-size: 20px 20px;
+      background-position: 0 0, 10px 10px;
+
+      font-family: 'Segoe UI', sans-serif;
+      color: #6b4f3b;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      text-align: center;
+    }
+
+    .image-container {
+      position: relative;
+      display: inline-block;
+      border-radius: 10%;
+      overflow: hidden;
+    }
+
+    .image-container::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border-radius: 80%;
+      background: radial-gradient(circle, rgba(249, 243, 233, 0) 80%, #f9f3e9 100%);
+      pointer-events: none;
+    }
+
+    .image-container img {
+      display: block;
+      max-width: 90vw;
+      height: auto;
+    }
+
+    .caption {
+      margin-top: 1rem;
+      font-size: 1.25rem;
+      font-weight: 500;
+      opacity: 0.8;
+    }
+  </style>
+</head>
+<body>
+  <div class="image-container">
+    <img src="Panniekpoppetje.png" alt="Paniekpoppetje" />
+  </div>
+  <div class="caption">Ik blijf, ook als het stormt</div>
+</body>
+</html>
