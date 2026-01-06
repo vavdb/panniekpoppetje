@@ -7,15 +7,9 @@
   <style>
     body {
       margin: 0;
-      background-color: #f9f3e9;
-      background-image: 
-        radial-gradient(rgba(0,0,0,0.02) 1px, transparent 0),
-        radial-gradient(rgba(0,0,0,0.02) 1px, transparent 0);
-      background-size: 20px 20px;
-      background-position: 0 0, 10px 10px;
-
+      background-color: #2f405c;
       font-family: 'Segoe UI', sans-serif;
-      color: #6b4f3b;
+      color: #ecf0f1;
       display: flex;
       flex-direction: column;
       justify-content: center;
@@ -27,26 +21,34 @@
     .image-container {
       position: relative;
       display: inline-block;
-      border-radius: 10%;
+      border-radius: 10px;
       overflow: hidden;
+      aspect-ratio: 1792 / 2400;
+      width: 90vw;
+      max-width: 600px; /* Reduced for better focus */
     }
 
-    .image-container::after {
+    /* Inner overlay for the vignette effect and side masking */
+    .image-container::before {
       content: '';
       position: absolute;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
-      border-radius: 80%;
-      background: radial-gradient(circle, rgba(249, 243, 233, 0) 80%, #f9f3e9 100%);
+      background: 
+        linear-gradient(to right, #2f405c 0%, transparent 25%, transparent 75%, #2f405c 100%),
+        linear-gradient(to bottom, #2f405c 0%, transparent 25%, transparent 75%, #2f405c 100%);
+      z-index: 2;
       pointer-events: none;
     }
 
-    .image-container img {
+    .image-container video {
       display: block;
-      max-width: 90vw;
-      height: auto;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 8px;
     }
 
     .caption {
@@ -59,7 +61,10 @@
 </head>
 <body>
   <div class="image-container">
-    <img src="Panniekpoppetje.png" alt="Paniekpoppetje" />
+    <video autoplay muted loop playsinline poster="Heimdallr.webp">
+      <source src="Heimdallr.mp4" type="video/mp4">
+      Your browser does not support the video tag.
+    </video>
   </div>
 </body>
 </html>
