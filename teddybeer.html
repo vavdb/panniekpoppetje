@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Afbeelding Blend Effect</title>
+<style>
+  body {
+    /* 1. Stel de achtergrondkleur in op de dominante donkergroene kleur van de afbeelding. 
+       #4a5d52 is een goede benadering, maar je kunt dit aanpassen. */
+    background-color: #4a5d52;
+    margin: 0;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    /* Centreer de inhoud voor dit voorbeeld */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .image-container {
+    width: 100%;
+    height: 100%;
+    padding: 0;
+  }
+
+  .blended-image {
+    display: block;
+    width: 100%;
+    height: 100%;
+    
+    /* 2. Pas een radiaal masker toe. 
+       Dit maakt het midden van de afbeelding zichtbaar (zwart) en 
+       vervaagt de randen naar transparant, waardoor de achtergrondkleur erdoorheen komt.
+       Pas de percentages aan (bv. 60% en 100%) om de zachtheid van de overgang te regelen. */
+    -webkit-mask-image: radial-gradient(circle at center, black 40%, transparent 95%);
+    mask-image: radial-gradient(circle at center, black 40%, transparent 95%);
+    
+    /* Zorgt voor een nette weergave */
+    object-fit: cover;
+  }
+</style>
+</head>
+<body>
+
+<div class="image-container">
+  <img src="Gemini_Generated_Image_h9ybv5h9ybv5h9yb.png" alt="Beer en kinderen in een magisch bos" class="blended-image">
+</div>
+
+</body>
+</html>

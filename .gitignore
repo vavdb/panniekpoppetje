@@ -1,0 +1,5 @@
+# Playwright MCP artifacts
+.playwright-mcp/
+
+# local test screenshots (decohere build verification)
+*.jpeg

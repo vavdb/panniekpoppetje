@@ -1,52 +1,123 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Afbeelding Blend Effect</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>decohere() — Vincent</title>
+<link rel="icon" href="data:,">
+
+<meta name="description" content="decohere() — een levensloop als besturingssysteem. Van de quantum-wolk naar standalone.">
+
+<!-- Fonts: Clash Display (geometric display) · JetBrains Mono · Satoshi (body) -->
+<link rel="preconnect" href="https://api.fontshare.com" crossorigin>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://api.fontshare.com/v2/css?f[]=clash-display@600,700&f[]=satoshi@400,500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+    "lenis": "https://esm.sh/lenis@1.1.20"
+  }
+}
+</script>
+
 <style>
-  body {
-    /* 1. Stel de achtergrondkleur in op de dominante donkergroene kleur van de afbeelding. 
-       #4a5d52 is een goede benadering, maar je kunt dit aanpassen. */
-    background-color: #4a5d52;
-    margin: 0;
-    height: 100vh;
-    width: 100vw;
-    overflow: hidden;
-    /* Centreer de inhoud voor dit voorbeeld */
-    display: flex;
-    justify-content: center;
-    align-items: center;
+  :root{
+    --void:#070708; --ink:#0d0d12;
+    --purple:#9b59b6; --orange:#e67e22; --blue:#1e63ff;
+    --text:#e8e8ef; --muted:#8a8a99; --accent:#54f0a6; --error:#ff5a7a;
+    --bg:var(--void); --fg:var(--text); --fg-muted:var(--muted);
   }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html{scroll-behavior:auto}
+  body{
+    background:var(--void); color:var(--text);
+    font-family:"Satoshi", system-ui, sans-serif;
+    overflow-x:hidden; -webkit-font-smoothing:antialiased;
+  }
+  #gl{position:fixed; inset:0; width:100vw; height:100vh; z-index:0; display:block}
 
-  .image-container {
-    width: 100%;
-    height: 100%;
-    padding: 0;
+  /* foreground scroll layer */
+  #beats{position:relative; z-index:2}
+  .beat{
+    min-height:100vh; display:flex; flex-direction:column; justify-content:center;
+    padding:12vh 8vw; max-width:1100px;
+    color:var(--fg);
   }
+  .beat:nth-child(even){align-items:flex-end; text-align:right; margin-left:auto}
+  .beat .tag{
+    font-family:"JetBrains Mono", monospace; font-size:.72rem; letter-spacing:.18em;
+    color:var(--fg-muted); opacity:.7; margin-bottom:1.4rem; text-transform:none;
+  }
+  .beat .sig{
+    font-family:"Clash Display", sans-serif; font-weight:700;
+    font-size:clamp(2rem, 5.2vw, 4.4rem); line-height:1.02; letter-spacing:-.01em;
+    color:var(--fg);
+    filter:blur(0px); transition:filter .1s linear;
+    word-break:break-word;
+  }
+  .beat .doc{
+    font-family:"JetBrains Mono", monospace; font-size:clamp(.82rem,1.15vw,1.02rem);
+    line-height:1.85; color:var(--fg-muted); margin-top:1.8rem; max-width:42ch;
+  }
+  .beat:nth-child(even) .doc{margin-left:auto}
+  .beat .line{opacity:0; transform:translateY(10px); transition:opacity .5s ease, transform .5s ease}
+  .beat.measured .line{opacity:1; transform:none}
+  .beat .line.val{color:var(--accent)}
+  .beat .line.crit{color:var(--error)}
+  /* legibility over bright glow */
+  .beat .sig{text-shadow:0 2px 30px rgba(4,4,8,.9), 0 0 3px rgba(4,4,8,.7)}
+  .beat .tag, .beat .line{text-shadow:0 1px 14px rgba(4,4,8,.92), 0 0 2px rgba(4,4,8,.8)}
+  body.lum-light .beat .sig{text-shadow:0 2px 26px rgba(238,241,250,.9)}
+  body.lum-light .beat .tag, body.lum-light .beat .line{text-shadow:0 1px 12px rgba(238,241,250,.92)}
+  /* stagger */
+  .beat.measured .line:nth-child(1){transition-delay:.02s}
+  .beat.measured .line:nth-child(2){transition-delay:.10s}
+  .beat.measured .line:nth-child(3){transition-delay:.18s}
+  .beat.measured .line:nth-child(4){transition-delay:.26s}
+  .beat.measured .line:nth-child(5){transition-delay:.34s}
 
-  .blended-image {
-    display: block;
-    width: 100%;
-    height: 100%;
-    
-    /* 2. Pas een radiaal masker toe. 
-       Dit maakt het midden van de afbeelding zichtbaar (zwart) en 
-       vervaagt de randen naar transparant, waardoor de achtergrondkleur erdoorheen komt.
-       Pas de percentages aan (bv. 60% en 100%) om de zachtheid van de overgang te regelen. */
-    -webkit-mask-image: radial-gradient(circle at center, black 40%, transparent 95%);
-    mask-image: radial-gradient(circle at center, black 40%, transparent 95%);
-    
-    /* Zorgt voor een nette weergave */
-    object-fit: cover;
+  /* footer */
+  #foot{
+    position:relative; z-index:2; min-height:60vh; display:flex; flex-direction:column;
+    justify-content:center; align-items:center; gap:.6rem; text-align:center; padding:8vh 8vw;
+    font-family:"JetBrains Mono", monospace; color:var(--fg-muted);
   }
+  #foot a{color:var(--fg); text-decoration:none; border-bottom:1px solid currentColor}
+  #foot a:hover{color:var(--accent)}
+  #foot .sign{opacity:.6; font-size:.8rem; margin-top:.4rem}
+
+  /* light-mode flip (driven by JS near restart) */
+  body.lum-light{--fg:#10131c; --fg-muted:#41506b}
+  body.lum-light #foot a{color:#10131c}
+
+  /* boot hint */
+  #scrollhint{
+    position:fixed; left:50%; bottom:3vh; transform:translateX(-50%); z-index:3;
+    font-family:"JetBrains Mono", monospace; font-size:.7rem; letter-spacing:.2em;
+    color:var(--muted); opacity:.7; animation:pulse 2.4s ease-in-out infinite; pointer-events:none;
+  }
+  @keyframes pulse{0%,100%{opacity:.25}50%{opacity:.8}}
+
+  #uptime{position:fixed; top:2.2vh; right:2.6vw; z-index:3; font-family:"JetBrains Mono",monospace;
+    font-size:.7rem; letter-spacing:.12em; color:var(--accent); opacity:.85; pointer-events:none}
+  body.lum-light #uptime{color:#1e7a52}
+
+  #err{position:fixed;inset:0;display:none;place-items:center;z-index:9;background:#070708;
+    color:var(--error);font-family:"JetBrains Mono",monospace;padding:2rem;text-align:center}
 </style>
 </head>
 <body>
+  <canvas id="gl"></canvas>
+  <main id="beats" aria-live="off"></main>
+  <footer id="foot"></footer>
+  <div id="uptime"></div>
+  <div id="scrollhint">scroll ↓ to collapse</div>
+  <div id="err"></div>
 
-<div class="image-container">
-  <img src="Gemini_Generated_Image_h9ybv5h9ybv5h9yb.png" alt="Beer en kinderen in een magisch bos" class="blended-image">
-</div>
-
+  <script type="module" src="decohere.js"></script>
 </body>
 </html>
