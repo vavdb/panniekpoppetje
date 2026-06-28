@@ -282,29 +282,26 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
     const cdOff = new Float32Array(N);
     { const bs = targets.bootstrap; for (let i = 0; i < N; i++) { const d = Math.hypot(bs[i * 3], bs[i * 3 + 1], bs[i * 3 + 2]); cdOff[i] = (0.6 * clamp01(d / 42) + 0.4 * Math.random()) * 0.58; } }
     const CDW = 0.4;   // per-particle conversion window
-    // tetromino rebuild: the street first gathers into 7 floating TETROMINO blocks, which then slide together into the cube (core_dump -> bootstrap). One block is the purple anomaly.
-    const TET_SHAPES = [
-      [[0, 0], [1, 0], [2, 0], [3, 0]],   // I
-      [[0, 0], [1, 0], [0, 1], [1, 1]],   // O
-      [[0, 0], [1, 0], [2, 0], [1, 1]],   // T
-      [[0, 0], [0, 1], [0, 2], [1, 2]],   // L
-      [[1, 0], [1, 1], [1, 2], [0, 2]],   // J
-      [[1, 0], [2, 0], [0, 1], [1, 1]],   // S
-      [[0, 0], [1, 0], [1, 1], [2, 1]],   // Z
-    ];
-    const NTB = TET_SHAPES.length, CELL = 4.4, PURPLE_BLOCK = 3;
-    const tBlock = new Uint8Array(N), tetLocal = new Float32Array(N * 3), blockAnchor = new Float32Array(NTB * 3), blockSlot = new Float32Array(NTB * 3);
-    const TET_SLOT = [[-1, 1], [0, 1], [1, 1], [-1, 0], [0, 0], [1, 0], [0, -1]], TET_SP = 16;   // 7 slots packed into a ~square tetris board
-    for (let b = 0; b < NTB; b++) {
-      blockAnchor[b * 3] = -52 + b * (104 / (NTB - 1)); blockAnchor[b * 3 + 1] = -4 + ((b % 2) ? 13 : -11); blockAnchor[b * 3 + 2] = (b - NTB / 2) * 4;   // blocks hover spread across the street, staggered height
-      blockSlot[b * 3] = TET_SLOT[b][0] * TET_SP; blockSlot[b * 3 + 1] = TET_SLOT[b][1] * TET_SP; blockSlot[b * 3 + 2] = rand(-2, 2);   // then pack into the board (flat-ish square), still distinct blocks
-    }
+    // tetromino rebuild: street gathers into 6 INTERLOCKING T/L pieces; the 7th (centre) is the PURPLE anomaly, made from the forbidden rain. Together they tile a filled square that then diffuses into the cube.
+    const BLOCK_CELLS = [
+      [[0, 0], [1, 0], [2, 0], [1, 1]],   // T  (pinwheel)
+      [[3, 0], [2, 1], [3, 1], [3, 2]],   // T  (pinwheel)   <- PURPLE (filled by the rain)
+      [[2, 2], [1, 3], [2, 3], [3, 3]],   // T  (pinwheel)
+      [[0, 1], [0, 2], [1, 2], [0, 3]],   // T  (pinwheel)
+      [[4, 0], [5, 0], [6, 0], [5, 1]],   // T
+      [[4, 1], [4, 2], [5, 2], [4, 3]],   // L
+      [[6, 1], [6, 2], [5, 3], [6, 3]],   // L  (interlocks with the one above)
+    ];   // 7 interlocking pieces tile a 7x4 board EXACTLY -> a real filled square (tall cells make it square overall)
+    const PURPLE_PIECE = 1, CW = 6.6, CH = 13.2;
+    const MAIN_PIECES = [0, 2, 3, 4, 5, 6];   // the cloud fills the 6 non-purple pieces; the rain fills the purple one
+    const cellWorld = (c) => [(c[0] - 3) * CW, (c[1] - 1.5) * CH];
+    const tBlock = new Uint8Array(N), tetSquare = new Float32Array(N * 3);
     for (let i = 0; i < N; i++) {
-      const b = Math.min(NTB - 1, (i / N * NTB) | 0); tBlock[i] = b;
-      const shape = TET_SHAPES[b], cell = shape[(Math.random() * shape.length) | 0];
-      tetLocal[i * 3] = (cell[0] - 1.5) * CELL + rand(-CELL * 0.42, CELL * 0.42);
-      tetLocal[i * 3 + 1] = (cell[1] - 1.0) * CELL + rand(-CELL * 0.42, CELL * 0.42);
-      tetLocal[i * 3 + 2] = rand(-CELL * 0.5, CELL * 0.5);
+      const b = MAIN_PIECES[Math.min(5, (i / N * 6) | 0)]; tBlock[i] = b;
+      const cells = BLOCK_CELLS[b], c = cells[(Math.random() * cells.length) | 0], w = cellWorld(c);
+      tetSquare[i * 3] = w[0] + rand(-CW * 0.46, CW * 0.46);
+      tetSquare[i * 3 + 1] = w[1] + rand(-CH * 0.46, CH * 0.46);
+      tetSquare[i * 3 + 2] = rand(-1.5, 1.5);
     }
     // boot orbital colour map like the hydrogen density plot: orange/yellow in the dense lobe cores -> purple at the thin fringes
     const WHITE = new THREE.Color(1, 1, 1);
@@ -380,6 +377,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       kernel_panic: 'kernel_panic: shared memory violation · repair_loop -> overflow',
       restart: 'main(resilience:true): SIGKILL partner · resynced with children',
     };
+    const logLines = ids.map((id) => { const d = document.createElement('div'); d.className = 'logline'; d.textContent = LOG[id] || ''; compileEl.appendChild(d); return d; });   // one persistent line per beat — the whole process log, always visible
     const SIM_MO = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
     // faux system monitor (btop-style), top-left. Values are STORY-driven: mem fills as processes (partner + kids) load, load spikes at stress beats.
     const mon = document.getElementById('mon'), mctx = mon && mon.getContext('2d');
@@ -423,6 +421,9 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       else { const a = rand(0, Math.PI * 2), rr = 30 + rand(-1.6, 1.6); x = Math.cos(a) * rr; y = Math.sin(a) * rr; }   // ring
       forbidPos[i * 3] = x; forbidPos[i * 3 + 1] = y + 2; forbidPos[i * 3 + 2] = rand(-3, 3);
     }
+    // the forbidden rain later becomes the PURPLE anomaly piece of the tetris square — its final cells
+    const forbidSquare = new Float32Array(NF * 3);
+    { const cells = BLOCK_CELLS[PURPLE_PIECE]; for (let i = 0; i < NF; i++) { const c = cells[(Math.random() * cells.length) | 0], w = cellWorld(c); forbidSquare[i * 3] = w[0] + rand(-CW * 0.46, CW * 0.46); forbidSquare[i * 3 + 1] = w[1] + rand(-CH * 0.46, CH * 0.46); forbidSquare[i * 3 + 2] = rand(-1.5, 1.5); } }
 
     // green hex 'nest' lattice behind the restart orbital — the daemon still ticking behind 'pure me'
     const NB = isMobile ? 700 : 1600;
@@ -538,14 +539,11 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       for (let i = 0; i < N; i++) {
         const k = i * 3;
         let x, y, z;
-        if (cdStagger) {   // street -> tetromino block -> pack into the square board -> diffuse into the cube
+        if (cdStagger) {   // street gathers straight into the blocks at their final SQUARE positions, then the square diffuses into the cube
           const b = tBlock[i];
-          const p1 = smoothstep(0.02 + b * 0.02, 0.30 + b * 0.02, f);   // gather street into the block (slight per-block stagger)
-          const p2 = smoothstep(0.34, 0.6, f);                         // pack: each block slides RIGIDLY into its slot -> a tetris square of distinct blocks
-          const p3 = smoothstep(0.7, 1.0, f);                          // diffuse: the tiled square dissolves into the solid cube
-          const ax = blockAnchor[b * 3] + tetLocal[k], ay = blockAnchor[b * 3 + 1] + tetLocal[k + 1], az = blockAnchor[b * 3 + 2] + tetLocal[k + 2];
-          const sx = blockSlot[b * 3] + tetLocal[k], sy = blockSlot[b * 3 + 1] + tetLocal[k + 1], sz = blockSlot[b * 3 + 2] + tetLocal[k + 2];
-          x = lerp(lerp(lerp(t0[k], ax, p1), sx, p2), t1[k], p3); y = lerp(lerp(lerp(t0[k + 1], ay, p1), sy, p2), t1[k + 1], p3); z = lerp(lerp(lerp(t0[k + 2], az, p1), sz, p2), t1[k + 2], p3);
+          const p1 = smoothstep(0.05 + b * 0.06, 0.46 + b * 0.06, f);   // pieces assemble into the square in sequence (one block after another)
+          const p3 = smoothstep(0.72, 1.0, f);                         // the filled square then diffuses into the solid cube
+          x = lerp(lerp(t0[k], tetSquare[k], p1), t1[k], p3); y = lerp(lerp(t0[k + 1], tetSquare[k + 1], p1), t1[k + 1], p3); z = lerp(lerp(t0[k + 2], tetSquare[k + 2], p1), t1[k + 2], p3);
         } else {
           const e = sxHold ? sxEase : ease;
           x = lerp(t0[k], t1[k], e); y = lerp(t0[k + 1], t1[k + 1], e); z = lerp(t0[k + 2], t1[k + 2], e);
@@ -616,13 +614,6 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
         cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
       } else if (nz > 0.005) {
         for (let i = 0; i < N; i++) { const k3 = i * 3, pz = neuroMask[i]; const tr = pz ? 1.25 : 0.05, tg = pz ? 1.0 : 0.2, tb = pz ? 0.32 : 0.1; cCol[k3] = 1 + (tr - 1) * nz; cCol[k3 + 1] = 1 + (tg - 1) * nz; cCol[k3 + 2] = 1 + (tb - 1) * nz; }   // lobes = bright YELLOW (overdriven), rest = very dim green (does not light up)
-        cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
-      } else if (cdStagger) {
-        const asm = smoothstep(0.06, 0.36, f) * (1 - smoothstep(0.72, 0.95, f));   // the anomaly block glows purple through the gather + packed square, fades as it diffuses into the cube
-        for (let i = 0; i < N; i++) { const k3 = i * 3;
-          if (tBlock[i] === PURPLE_BLOCK) { cCol[k3] = 1; cCol[k3 + 1] = lerp(1, 0.45, asm); cCol[k3 + 2] = lerp(1, 2.2, asm); }   // grey/orange tint * this = violet
-          else { cCol[k3] = 1; cCol[k3 + 1] = 1; cCol[k3 + 2] = 1; }
-        }
         cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
       } else if (neuroDimmed) { cCol.fill(1); cgeo.attributes.color.needsUpdate = true; neuroDimmed = false; }
 
@@ -695,7 +686,15 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
           }
           forbid.g.attributes.position.needsUpdate = true;
         }
-        forbid.m.opacity = smoothstep(0.16, 0.55, appear) * (1 - smoothstep(sx + 1.0, sx + 1.2, bf)) * 0.9;   // visible through the rain, fades only once it has landed
+        // the forbidden rain rises into the PURPLE anomaly piece of the rebuild square, then dissolves as the cube diffuses (cf tracks the main square's assemble/diffuse timing)
+        if (Math.floor(bf) === idx.core_dump) {
+          const cf = bf - idx.core_dump, gather = smoothstep(0.06, 0.5, cf), dissolve = smoothstep(0.72, 1.0, cf);
+          for (let i = 0; i < NF; i++) { const k = i * 3; forbid.pos[k] = lerp(forbid.pos[k], forbidSquare[k], gather); forbid.pos[k + 1] = lerp(forbid.pos[k + 1], forbidSquare[k + 1], gather); forbid.pos[k + 2] = lerp(forbid.pos[k + 2], forbidSquare[k + 2], gather); }
+          forbid.g.attributes.position.needsUpdate = true;
+          forbid.m.opacity = gather * (1 - dissolve) * 0.92;
+        } else {
+          forbid.m.opacity = smoothstep(0.16, 0.55, appear) * (1 - smoothstep(sx + 1.0, sx + 1.2, bf)) * 0.9;   // visible through the rain, fades only once it has landed
+        }
       }
 
       // infall: at the very start the static just roams; then it begins infalling and feeds the actual cloud
@@ -774,19 +773,19 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
         cpuH[MONN - 1] = clampN(load, 2, 99); memH[MONN - 1] = clampN(mem, 3, 98);
         drawMon();
       }
-      // console: full rebuild build-log around bootstrap (the showpiece); otherwise one persistent stdout line for the current beat, with a blinking cursor
-      if (compileEl) {
-        const cur = (Math.sin(t * 4) > 0) ? '█' : ' ';
-        const bp = smoothstep(Bs - 0.55, Bs + 0.4, bf) * (1 - smoothstep(Bs + 0.5, Bs + 0.9, bf));   // bootstrap build-log window
-        if (bp > 0.02) {
-          const shown = Math.floor(smoothstep(Bs - 0.5, Bs + 0.4, bf) * COMPILE.length);
-          compileEl.textContent = COMPILE.slice(0, shown).join('\n') + (shown < COMPILE.length ? cur : '');
-          compileEl.style.opacity = Math.max(bp, 0.62);
-        } else {
-          const line = LOG[ids[active]] || '';
-          const rv = Math.min(line.length, Math.floor(smoothstep(0.12, 0.5, cen) * line.length));   // type the line out as the beat settles
-          compileEl.textContent = line.slice(0, rv) + cur;
-          compileEl.style.opacity = 0.6;
+      // console: every beat's stdout line shown all the time; the active beat is highlighted (+ blinking cursor); the bootstrap line expands into the full build-log as it rebuilds
+      if (logLines.length) {
+        const cur = (Math.sin(t * 4) > 0) ? ' █' : '';
+        const bp = smoothstep(Bs - 0.55, Bs + 0.4, bf) * (1 - smoothstep(Bs + 0.5, Bs + 0.9, bf));
+        for (let i = 0; i < logLines.length; i++) {
+          const d = logLines[i], on = (i === active);
+          if (d._on !== on) { d.classList.toggle('on', on); d._on = on; }
+          if (i === idx.bootstrap && bp > 0.02) {
+            const shown = Math.floor(smoothstep(Bs - 0.5, Bs + 0.4, bf) * COMPILE.length);
+            d.textContent = COMPILE.slice(0, shown).join('\n') + (shown < COMPILE.length ? ' █' : '');
+          } else {
+            d.textContent = (LOG[ids[i]] || '') + (on ? cur : '');
+          }
         }
       }
 

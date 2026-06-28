@@ -111,13 +111,14 @@
   #mon{position:fixed; top:2.0vh; left:2.6vw; z-index:3; width:154px; height:64px; opacity:.82; pointer-events:none}
   body.lum-light #mon{opacity:.72}
 
-  /* compile-log (core_dump -> bootstrap rebuild) */
+  /* persistent console: every beat's stdout line, all the time (active line highlighted) */
   #compile{
     position:fixed; left:2.6vw; bottom:3vh; z-index:3;
-    font-family:"Kode Mono", monospace; font-size:.66rem; line-height:1.5;
-    color:var(--accent); white-space:pre; opacity:0; pointer-events:none;
+    font-family:"Kode Mono", monospace; font-size:.58rem; line-height:1.5; pointer-events:none;
   }
-  body.lum-light #compile{color:#1e7a52}
+  #compile .logline{color:var(--accent); white-space:pre; opacity:.26; transition:opacity .3s ease}
+  #compile .logline.on{opacity:.95}
+  body.lum-light #compile .logline{color:#1e7a52}
 
   #err{position:fixed;inset:0;display:none;place-items:center;z-index:9;background:#070708;
     color:var(--error);font-family:"JetBrains Mono",monospace;padding:2rem;text-align:center}
