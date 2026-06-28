@@ -500,13 +500,6 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
     };
     let helixFlowT = 0, helixFlowStart = -1;   // flow clock: particles are generated on the LEFT (hydrogen) and flow RIGHT through the hose; starts once the hydrogen scene has STOOD
 
-    // bootstrap: green/purple LIGHTNING crackling INSIDE the (still orange) cube — charging / preparing it to become the hexagon. Separate additive layer so it reads as light ON the orange, not a recolour.
-    const NLB = isMobile ? 8 : 14, NLP = isMobile ? 22 : 34, NLight = NLB * NLP;
-    const lightning = ent(NLight, texDot, 0xffffff, isMobile ? 3.4 : 3.2);
-    const lCol = new Float32Array(NLight * 3); lightning.g.setAttribute('color', new THREE.BufferAttribute(lCol, 3)); lightning.m.vertexColors = true; lightning.m.color.setHex(0xffffff); lightning.m.needsUpdate = true;
-    const lBolt = [];
-    for (let b = 0; b < NLB; b++) lBolt.push({ a: inSphere(24), b: inSphere(24), col: (b % 2 === 0) ? [0.25, 1.0, 0.45] : [0.72, 0.32, 1.0], ph: Math.random() });   // alternating green / purple bolts
-
     // warm SUNRISE behind the final (restart) scene — a SMALL sun: soft halo + a star-burst of godray spikes
     const haloC = document.createElement('canvas'); haloC.width = haloC.height = 128;
     { const g = haloC.getContext('2d'), grd = g.createRadialGradient(64, 64, 0, 64, 64, 64); grd.addColorStop(0, 'rgba(255,226,176,0.95)'); grd.addColorStop(0.45, 'rgba(255,180,96,0.32)'); grd.addColorStop(1, 'rgba(255,150,60,0)'); g.fillStyle = grd; g.fillRect(0, 0, 128, 128); }
@@ -603,9 +596,9 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       const hexDark = smoothstep(A - 0.6, A - 0.1, bf);   // hexagon goes DARK from attach (bind_partner) onward, like the neurotype base — so the purple sweep + family drawing pop (daemon CUBE stays bright: hexDark=0 there)
       // honeycomb crystallisation: only around the daemon beat — the lattice GEOMETRY reorganises as traveling bands of snapped cells flow L->R (cellular-automaton wave), then settles to the static honeycomb by attach
       const dm = idx.daemon, cryst = smoothstep(Bs + 0.4, dm - 0.2, bf) * (1 - smoothstep(dm + 0.25, A - 0.05, bf));
-      const bsTech = smoothstep(Bs - 0.45, Bs - 0.05, bf) * (1 - smoothstep(Bs + 0.3, dm - 0.1, bf));   // bootstrap cube: technical green/purple "compile" scan, signifying the cube being shaped into the hexagon
       const t0 = targets[ids[i0]], t1 = targets[ids[i1]];
       const cdStagger = (i0 === idx.core_dump);   // street -> cube: convert particles at staggered times for street/cube overlap
+      const bsToHex = (i0 === idx.bootstrap), bsSweepFront = lerp(-38, 38, ease);   // materialisation plane sweeps L->R across the cube -> behind it the cube has become the green hexagon, ahead it is still the orange cube
       const sxHold = (i0 === idx.syntax_error), sxEase = smoothstep(0.34, 1.0, f);   // hold the complete house briefly (forbidden sits over it) before morphing to the street
       for (let i = 0; i < N; i++) {
         const k = i * 3;
@@ -620,6 +613,9 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
           const gx = lerp(t0[k], tetSquare[k], g1), gy = lerp(t0[k + 1], tetSquare[k + 1] + DROP, g1), gz = lerp(t0[k + 2], tetSquare[k + 2], g1);
           const dxp = gx, dyp = lerp(gy, tetSquare[k + 1], g2), dzp = gz;   // drop = just the Y falling from spawn to the cell
           x = lerp(dxp, t1[k], p3); y = lerp(dyp, t1[k + 1], p3); z = lerp(dzp, t1[k + 2], p3);
+        } else if (bsToHex) {   // materialisation sweep: the plane crosses the cube; particles BEHIND it have morphed to the hexagon, ahead still the cube
+          const pm = smoothstep(bsSweepFront + 9, bsSweepFront - 9, t0[k]);   // t0 = cube position; 1 behind the plane (hexagon), 0 ahead (cube)
+          x = lerp(t0[k], t1[k], pm); y = lerp(t0[k + 1], t1[k + 1], pm); z = lerp(t0[k + 2], t1[k + 2], pm);
         } else {
           const e = sxHold ? sxEase : ease;
           x = lerp(t0[k], t1[k], e); y = lerp(t0[k + 1], t1[k + 1], e); z = lerp(t0[k + 2], t1[k + 2], e);
@@ -649,7 +645,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       // (panic keeps the hexagon sprites now — the lattice flashes + waves rather than shattering into points)
 
       // tint / bg / mode
-      tmpTint.copy(colOf(VINCENT_TINT, i0)).lerp(colOf(VINCENT_TINT, i1), f); cmat.color.copy(tmpTint).lerp(WHITE, Math.max(bootTone, nz, restTone, smoothstep(0.004, 0.04, sweepTone), smoothstep(0.08, 0.4, pp)));   // white when per-particle colours drive; sweep uses a near-binary ramp so cmat stays white across the WHOLE sweep (no mid-fade product peak = the green/yellow flash on entering neurotype)
+      tmpTint.copy(colOf(VINCENT_TINT, i0)).lerp(colOf(VINCENT_TINT, i1), f); cmat.color.copy(tmpTint).lerp(WHITE, Math.max(bootTone, nz, restTone, smoothstep(0.004, 0.04, sweepTone), smoothstep(0.08, 0.4, pp), bsToHex ? 1 : 0));   // white when per-particle colours drive; sweep uses a near-binary ramp so cmat stays white across the WHOLE sweep (no mid-fade product peak = the green/yellow flash on entering neurotype)
       tmpBg.copy(colOf(BEAT_BG, i0)); nextBg.copy(colOf(BEAT_BG, i1)); tmpBg.lerp(nextBg, f); scene.background.copy(tmpBg);
       const lum = 0.2126 * tmpBg.r + 0.7152 * tmpBg.g + 0.0722 * tmpBg.b, light = lum > 0.32;
       document.body.classList.toggle('lum-light', light); setMode(light);
@@ -659,7 +655,6 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       cmat.opacity *= (1 - 0.15 * pp);   // panic: keep the flashing lattice fairly bright
       cmat.opacity *= (1 - 0.4 * restTone);   // restart: softer (the hydrogen is the whole cloud now) but still clearly present — not a blinding vlek, not too faint either
       cmat.size = (isMobile ? 1.7 : 1.5) * (1 - 0.12 * restTone);   // only slightly smaller at restart
-      cmat.opacity *= (1 - 0.28 * bsTech);   // dim the orange cube a touch while the lightning crackles, so the green/purple reads
 
       // per-particle cloud colour: boot = hydrogen density map (orange core -> purple fringe); neurotype = dim-green hexagon with an orange puzzle piece
       if (bootTone > 0.005) {
@@ -667,6 +662,16 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
         cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
       } else if (restTone > 0.005) {
         for (let i = 0; i < N; i++) { const k3 = i * 3; cCol[k3] = 1 + (restCol[k3] - 1) * restTone; cCol[k3 + 1] = 1 + (restCol[k3 + 1] - 1) * restTone; cCol[k3 + 2] = 1 + (restCol[k3 + 2] - 1) * restTone; }   // strand particles carry their colour the whole way; they're hidden inside the hydrogen until they stream out into the helix
+        cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
+      } else if (bsToHex) {   // materialisation sweep colour: ahead of the plane = orange cube, behind = green hexagon (a thin bright edge where the plane is crossing)
+        for (let i = 0; i < N; i++) { const k3 = i * 3;
+          const pm = smoothstep(bsSweepFront + 9, bsSweepFront - 9, targets.bootstrap[k3]);   // same plane as the position morph
+          const edge = (1 - Math.abs(targets.bootstrap[k3] - bsSweepFront) / 9);               // bright leading edge at the plane
+          const eg = edge > 0 ? edge * edge * 0.8 : 0;
+          cCol[k3]     = lerp(0.902, 0.208, pm) + eg;   // orange (0xe67e22) -> green (0x35e06a), + white-ish edge glow
+          cCol[k3 + 1] = lerp(0.494, 0.878, pm) + eg;
+          cCol[k3 + 2] = lerp(0.133, 0.416, pm) + eg;
+        }
         cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
       } else if (sweepTone > 0.005) {
         const sweepAmt = smoothstep(idx.daemon - 0.5, idx.daemon - 0.05, bf);               // ramp to full purple sweep BY the daemon centre (was daemon+0.4 = barely 0.1 at centre -> dim purple read as blue)
@@ -852,23 +857,6 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
         helixP.g.attributes.color.needsUpdate = true;
       }
       helixP.m.opacity = restTone * 0.72;   // softer / smokier
-
-      // bootstrap lightning: green/purple bolts crackle INSIDE the orange cube (preparing it for the hexagon)
-      if (bsTech > 0.005) {
-        for (let b = 0; b < NLB; b++) {
-          const bolt = lBolt[b], on = Math.max(0, Math.sin(t * 7 + bolt.ph * 6.28)), lit = (0.25 + 0.75 * on * on) * bsTech * 2.6;   // crackle flicker with a baseline + boosted so green/purple reads ON the orange (additive)
-          const seed = Math.floor(t * 2.5 + b * 3.1);   // changes each strike -> the bolt re-jags
-          for (let p = 0; p < NLP; p++) {
-            const k = (b * NLP + p) * 3, s = p / (NLP - 1), env = Math.sin(s * Math.PI);   // env fades the zigzag at the bolt ends
-            lightning.pos[k]     = lerp(bolt.a[0], bolt.b[0], s) + Math.sin(s * 22 + seed * 1.7 + b) * 6 * env;
-            lightning.pos[k + 1] = lerp(bolt.a[1], bolt.b[1], s) + Math.cos(s * 19 + seed * 2.3 + b) * 6 * env;
-            lightning.pos[k + 2] = lerp(bolt.a[2], bolt.b[2], s) + Math.sin(s * 17 + seed) * 4 * env + 14;   // pulled toward the camera so the bolts sit in FRONT of the dense cube, not buried in it
-            lCol[k] = bolt.col[0] * lit; lCol[k + 1] = bolt.col[1] * lit; lCol[k + 2] = bolt.col[2] * lit;
-          }
-        }
-        lightning.g.attributes.position.needsUpdate = true; lightning.g.attributes.color.needsUpdate = true;
-        lightning.m.opacity = bsTech * 0.95;
-      } else if (lightning.m.opacity > 0) lightning.m.opacity = 0;
 
       // bloom + glitch (no camera shake)
       bloom.strength = light ? 0.04 : Math.max(0.12 - 0.07 * pp, 0.6 - 0.36 * bootTone - 0.22 * nz - 0.1 * Math.max(0, hexDark - nz) - 0.18 * restTone - 0.55 * pp);   // panic + restart: trim bloom so neither the red lattice nor the hydrogen blooms into a big white blob (but keep the hydrogen present)
