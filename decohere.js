@@ -674,13 +674,13 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
         }
         cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
       } else if (sweepTone > 0.005) {
-        const sweepAmt = smoothstep(idx.daemon - 0.5, idx.daemon - 0.05, bf);               // ramp to full purple sweep BY the daemon centre (was daemon+0.4 = barely 0.1 at centre -> dim purple read as blue)
+        const sweepAmt = smoothstep(idx.daemon - 0.05, idx.daemon + 0.45, bf);              // purple node-sweep eases in AFTER the daemon centre -> a beat of clean bright-green honeycomb right after the materialisation, then the sweep arrives gently (no abrupt purple line)
         for (let i = 0; i < N; i++) { const k3 = i * 3;
           const row = Math.floor((live[k3 + 1] + 60) / 7);                                  // horizontal row by height
           const speed = 0.09 + ((row * 7) % 11) * 0.012;                                    // each row sweeps at its OWN speed
           const band = -56 + ((t * speed + row * 0.17) % 1 + 1) % 1 * 112;
           const dx = live[k3] - band, pulse = Math.exp(-dx * dx / 130) * sweepAmt;
-          const baseR = lerp(0.13, 0.11, hexDark), baseG = lerp(0.54, 0.46, hexDark), baseB = lerp(0.31, 0.27, hexDark);   // stay BRIGHT green through the partner stage (honeycomb cells read clearly), barely dims
+          const baseR = lerp(0.21, 0.11, hexDark), baseG = lerp(0.88, 0.46, hexDark), baseB = lerp(0.42, 0.27, hexDark);   // daemon honeycomb = same BRIGHT green as the materialisation ending (no sudden darken at the hand-off); dims toward the partner stage so the purple pops
           let gr = baseR + (0.78 - baseR) * pulse, gg = baseG + (0.26 - baseG) * pulse, gb = baseB + (1.0 - baseB) * pulse;   // node sweeps to bright purple (pops hard against the dark hexagon)
           if (nz > 0.005 && neuroMask[i]) { gr = lerp(gr, 1.25, nz); gg = lerp(gg, 1.0, nz); gb = lerp(gb, 0.32, nz); }   // neurotype: the lit lobes glow YELLOW over the still-running purple sweep
           cCol[k3] = gr; cCol[k3 + 1] = gg; cCol[k3 + 2] = gb; }   // full strength (cmat is held white across the sweep) — no fade-to-white that would brighten mid-handoff
