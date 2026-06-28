@@ -557,6 +557,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       const ease = f, cen = 1 - 2 * Math.min(f, 1 - f);   // (scroll dwell handled in beatFrom)
       const pp = Math.max(0, 1 - Math.abs(bf - P) / 0.95);                 // kernel-panic proximity
       const restartFlow = smoothstep(Re - 1, Re, bf);
+      const helixFlow = smoothstep(Re - 0.32, Re - 0.02, bf);   // the helix spirals only flow OUT after the hydrogen orbital has formed
       const cloudShow = smoothstep(idx.boot - 0.72, idx.boot + 0.22, bf);   // boot coalesces gradually as the infall feeds it (birth FROM the infall) — wide ramp = slow grow
       const bootForm = cloudShow;                                                     // per-particle activation reads this (0->1)
       const bootTone = 1 - smoothstep(idx.boot + 0.15, idx.boot + 0.75, bf);          // orbital colours (white tint + density map) through boot, fade into the grey house
@@ -585,26 +586,21 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
             const radBase = smoothstep(0, 0.04, v) * (11 + 12 * v), rad = radBase + Math.sin(t * 0.35 + i * 0.3) * 1.6 * hash[i];   // wider first loop, grows toward the end; gentler shimmer
             const gap = lerp(3, -16, smoothstep(0.96, 1.0, v));   // just-not-touching; cross only at the very end past the heartbeats
             const ay = top * lerp(24, radBase + gap, smoothstep(0.05, 0.4, v));
-            x = lerp(x, -74 + v * 156 + Math.sin(t * 0.25 + i) * 1.6, restartFlow); y = lerp(y, ay + Math.sin(ang) * rad, restartFlow); z = lerp(z, Math.cos(ang) * rad, restartFlow);
+            const hx = -74 + v * 156 + Math.sin(t * 0.25 + i) * 1.6, hy = ay + Math.sin(ang) * rad, hz = Math.cos(ang) * rad;
+            const ccx = -74 + (hash[i] - 0.5) * 34, ccy = (hash2[i] - 0.5) * 34, ccz = (hash[i] - 0.5) * 34;   // collapsed inside the hydrogen first (only the hydrogen forms), then flows out
+            x = lerp(x, lerp(ccx, hx, helixFlow), restartFlow); y = lerp(y, lerp(ccy, hy, helixFlow), restartFlow); z = lerp(z, lerp(ccz, hz, helixFlow), restartFlow);
           } else {   // the hydrogen orbital is ALIVE but CALM: gentle slow swirl + a soft shallow breathe (settled, not frantic)
             const cx = -74, dx = x - cx, a = t * 0.13 + y * 0.012, ca = Math.cos(a), sa = Math.sin(a), br = 1 + 0.035 * Math.sin(t * 0.5 + i * 0.012) * restartFlow;
             const rx = dx * ca - z * sa, rz = dx * sa + z * ca;   // steady swirl; fade the DISPLACEMENT (not the angle) by restartFlow so scrolling in can't sweep through many turns
             x = cx + lerp(dx, rx, restartFlow) * br; z = lerp(z, rz, restartFlow) * br; y = y * br;
           }
         }
-        if (pp > 0.05) {                                                     // kernel panic: the hexagon LATTICE ripples in an organic wave (not a shatter), then morphs to the hydrogen
-          const w = pp * (1 - restartFlow);
-          const ph = x * 0.07 + t * 1.4;
-          y += Math.sin(ph) * 9 * w;
-          z += Math.cos(ph * 0.8 + y * 0.05) * 9 * w;
-          x += Math.sin(y * 0.08 + t * 1.1) * 5 * w;
-        }
         if (nz > 0.005 && isFwd[i] && hash[i] < 0.6) {                 // a subset of the lit lobe particles tether back to the lattice
           const flatZ = targets.spawn_smurf[k + 2];                    // this particle's flat hexLat z
           const pulse = 0.5 + 0.5 * Math.sin(t * 1.6 + i * 0.7);       // per-particle phase -> flowing, not a uniform pump
           z = lerp(z, lerp(32, flatZ, pulse), nz);                     // travel between forward lobe (z=32) and the lattice plane, only in the neuro window
         }
-        const wob = 1.4 * (1 - 0.6 * pp);                                     // calmer base wobble during panic (less blob-wobble)
+        const wob = 1.4 * (1 - 0.98 * pp);                                    // the panic hexagon does NOT wobble — held still while it flashes red
         live[k] = x + Math.sin(t * 0.5 + i) * wob; live[k + 1] = y + Math.cos(t * 0.4 + i * 1.3) * wob; live[k + 2] = z + Math.sin(t * 0.3 + i * 0.7) * wob;
       }
       cgeo.attributes.position.needsUpdate = true;
@@ -613,7 +609,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       // (panic keeps the hexagon sprites now — the lattice flashes + waves rather than shattering into points)
 
       // tint / bg / mode
-      tmpTint.copy(colOf(VINCENT_TINT, i0)).lerp(colOf(VINCENT_TINT, i1), f); cmat.color.copy(tmpTint).lerp(WHITE, Math.max(bootTone, nz, restTone, smoothstep(0.004, 0.04, sweepTone)));   // white when per-particle colours drive; sweep uses a near-binary ramp so cmat stays white across the WHOLE sweep (no mid-fade product peak = the green/yellow flash on entering neurotype)
+      tmpTint.copy(colOf(VINCENT_TINT, i0)).lerp(colOf(VINCENT_TINT, i1), f); cmat.color.copy(tmpTint).lerp(WHITE, Math.max(bootTone, nz, restTone, smoothstep(0.004, 0.04, sweepTone), smoothstep(0.08, 0.4, pp)));   // white when per-particle colours drive; sweep uses a near-binary ramp so cmat stays white across the WHOLE sweep (no mid-fade product peak = the green/yellow flash on entering neurotype)
       tmpBg.copy(colOf(BEAT_BG, i0)); nextBg.copy(colOf(BEAT_BG, i1)); tmpBg.lerp(nextBg, f); scene.background.copy(tmpBg);
       const lum = 0.2126 * tmpBg.r + 0.7152 * tmpBg.g + 0.0722 * tmpBg.b, light = lum > 0.32;
       document.body.classList.toggle('lum-light', light); setMode(light);
@@ -652,10 +648,13 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
           else { cCol[k3] = 1; cCol[k3 + 1] = 1; cCol[k3 + 2] = 1; }
         }
         cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
-      } else if (pp > 0.05) {   // kernel panic: irregular WHITE flashes of the red lattice, settling to FULLY RED before it morphs to the hydrogen
-        const redden = smoothstep(P - 0.1, P + 0.3, bf), thr = lerp(0.4, 1.05, redden);
-        for (let i = 0; i < N; i++) { const k3 = i * 3, fl = (Math.sin(t * 17 + hash[i] * 40 + i * 0.6) > thr) ? 1 : 0;
-          cCol[k3] = 1; cCol[k3 + 1] = 1 + fl * 6; cCol[k3 + 2] = 1 + fl * 6; }   // tint is red -> flash particles go white, the rest stay red
+      } else if (pp > 0.05) {   // kernel panic: lattice points randomly error — flash WHITE then stay RED — accumulating until the whole hexagon is red (cmat is forced white, so cCol IS the colour)
+        const redden = smoothstep(P - 0.55, P + 0.25, bf);   // fraction of points that have errored
+        for (let i = 0; i < N; i++) { const k3 = i * 3, e = hash[i];
+          if (Math.abs(redden - e) < 0.045) { cCol[k3] = 1.6; cCol[k3 + 1] = 1.6; cCol[k3 + 2] = 1.6; }   // WHITE flash at the instant it errors
+          else if (redden > e) { cCol[k3] = 1.0; cCol[k3 + 1] = 0.16; cCol[k3 + 2] = 0.16; }              // errored -> stays RED
+          else { cCol[k3] = 0.12; cCol[k3 + 1] = 0.5; cCol[k3 + 2] = 0.3; }                                // not yet errored -> still green
+        }
         cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
       } else if (neuroDimmed) { cCol.fill(1); cgeo.attributes.color.needsUpdate = true; neuroDimmed = false; }
 
@@ -712,13 +711,13 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
         const sx = idx.syntax_error;
         const appear = smoothstep(sx - 0.05, sx + 0.12, bf);                       // grows over the held house
         const cloud = smoothstep(sx + 0.16, sx + 0.5, bf);                         // drifts up into a purple CLOUD above the street
-        const fallPhase = smoothstep(sx + 0.82, sx + 1.3, bf);                     // RAINS down only AFTER the house->street scene has nearly finished (purple cloud holds above it first)
+        const fallPhase = smoothstep(sx + 0.55, sx + 0.78, bf);                    // RAINS once the house->street scene reads (purple cloud holds first), then falls fast / all at once
         if (appear > 0.001) {
           const sc = 0.55 + 0.45 * appear;
           for (let i = 0; i < NF; i++) {
             const fx = forbidPos[i * 3] * sc, fy = forbidPos[i * 3 + 1] * sc, fz = forbidPos[i * 3 + 2] * sc + 16;
             const cx = (hash[i] - 0.5) * 150, cy = 26 + (hash2[i] - 0.5) * 24, cz = (hash2[i] - 0.5) * 50;   // cloud target above the landscape
-            const started = clamp01((fallPhase - hash[i] * 0.5) * 2.2);           // per-drop staggered START of the fall (scroll-driven)
+            const started = clamp01((fallPhase - hash[i] * 0.12) * 5);            // nearly all drops start together (small stagger, fast) — no slow left-to-right wave
             const spd = 0.17 + hash2[i] * 0.6;                                    // each drop's OWN fall speed
             const cyc = ((t * spd + hash[i] * 9.17) % 1 + 1) % 1;                 // continuous TIME-based sawtooth: the drop falls, wraps at the ground, repeats — real individual drops, not a scroll-locked sheet
             const yTop = 30 + (hash2[i] - 0.5) * 24, yBot = -46 + (hash[i] - 0.5) * 12, driftX = (hash2[i] - 0.5) * 16 * started;
