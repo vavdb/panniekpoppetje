@@ -207,6 +207,10 @@ function makeTargets(N, ids) {
     neuro[i * 3] = x; neuro[i * 3 + 1] = y; neuro[i * 3 + 2] = fwd ? 32 : hexLat[i * 3 + 2];
   }
   T.neurotype_export = neuro;
+  // kernel_panic: the hexagon (lobes flattened) drifts LEFT toward where the hydrogen 'pure me' will be, then morphs into it
+  const panicHex = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) { panicHex[i * 3] = hexLat[i * 3] - 34; panicHex[i * 3 + 1] = hexLat[i * 3 + 1]; panicHex[i * 3 + 2] = hexLat[i * 3 + 2] * 0.6; }
+  T.kernel_panic = panicHex;
   // bootstrap derived from the daemon lattice: a smaller, jittered (less-defined) cube. Each particle keeps its own lattice node,
   // so bootstrap->daemon is a pure grow + sharpen (pattern crystallises) instead of a full reshuffle/mix.
   const bs = new Float32Array(N * 3);
@@ -476,7 +480,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       for (let k = 0; k < 6; k++) { g.save(); g.rotate(k * Math.PI / 3); const sg = g.createLinearGradient(0, 0, 0, -126); sg.addColorStop(0, 'rgba(255,224,170,0.85)'); sg.addColorStop(1, 'rgba(255,180,90,0)'); g.fillStyle = sg; g.beginPath(); g.moveTo(-5, 0); g.lineTo(0, -126); g.lineTo(5, 0); g.closePath(); g.fill(); g.restore(); }   // godray spikes
     }
     const mkSun = (cv, sc) => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false })); s.scale.set(sc, sc, 1); scene.add(s); return s; };
-    const sunHalo = mkSun(haloC, 300), sunStar = mkSun(starC, 200);   // smaller than before (was 460)
+    const sunHalo = mkSun(haloC, 220), sunStar = mkSun(starC, 145);   // small sun (was 460)
     let sunRise = 0;   // time-eased rise progress (so the sun keeps arcing up while you sit at the ending, not just on scroll)
 
     /* post */
@@ -588,12 +592,12 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
             x = cx + lerp(dx, rx, restartFlow) * br; z = lerp(z, rz, restartFlow) * br; y = y * br;
           }
         }
-        if (pp > 0.05) {                                                     // kernel panic: points shatter individually, not as a connected wobbling slab
-          const sh = pp * (1 - restartFlow);                                  // fade the shatter out as restart ramps in -> the two heavy effects never run at full strength together
-          x += Math.sin(Math.floor(y / 7) + t * 18) * 22 * hash[i] * sh;      // band tear broken up per-particle (hash) so bands don't move as solid bars
-          x += (hash[i] - 0.5) * sh * 56 * (0.5 + 0.5 * Math.sin(t * 26 + i * 7.1));   // flickering per-point datamosh throw (wider = sparser, reads as particles not a cloud)
-          y += (hash2[i] - 0.5) * sh * 36;
-          z += (hash[i] - 0.5) * sh * 60;
+        if (pp > 0.05) {                                                     // kernel panic: the hexagon LATTICE ripples in an organic wave (not a shatter), then morphs to the hydrogen
+          const w = pp * (1 - restartFlow);
+          const ph = x * 0.07 + t * 1.4;
+          y += Math.sin(ph) * 9 * w;
+          z += Math.cos(ph * 0.8 + y * 0.05) * 9 * w;
+          x += Math.sin(y * 0.08 + t * 1.1) * 5 * w;
         }
         if (nz > 0.005 && isFwd[i] && hash[i] < 0.6) {                 // a subset of the lit lobe particles tether back to the lattice
           const flatZ = targets.spawn_smurf[k + 2];                    // this particle's flat hexLat z
@@ -606,8 +610,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       cgeo.attributes.position.needsUpdate = true;
       cloud.rotation.y = Math.sin(t * 0.4) * 0.3 * cen * (1 - restartFlow) * (1 - pp);   // settle -> gentle rotate; no coherent rotation during panic
       cloud.rotation.x = 0;
-      if (pp > 0.35 && !cloudStriped) { cmat.map = texDot; cmat.size = isMobile ? 2.2 : 1.9; cmat.needsUpdate = true; cloudStriped = true; }   // panic -> small discrete shattering points (not a red cloud)
-      if (pp < 0.2 && cloudStriped) { cmat.map = texHex; cmat.size = isMobile ? 1.7 : 1.5; cmat.needsUpdate = true; cloudStriped = false; }
+      // (panic keeps the hexagon sprites now — the lattice flashes + waves rather than shattering into points)
 
       // tint / bg / mode
       tmpTint.copy(colOf(VINCENT_TINT, i0)).lerp(colOf(VINCENT_TINT, i1), f); cmat.color.copy(tmpTint).lerp(WHITE, Math.max(bootTone, nz, restTone, smoothstep(0.004, 0.04, sweepTone)));   // white when per-particle colours drive; sweep uses a near-binary ramp so cmat stays white across the WHOLE sweep (no mid-fade product peak = the green/yellow flash on entering neurotype)
@@ -617,7 +620,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       cmat.opacity = (light ? 0.85 : 0.9) - (light ? 0.16 : 0.32) * bootTone;          // boot: lower opacity so dense cores stay particle-y (less bloom 'vlek'); visibility is gated per-particle by act
       const heartFocus = smoothstep(A - 0.4, A, bf) * (1 - smoothstep(Sm - 0.1, Sm + 0.4, bf));   // gentle dim for Venn read
       cmat.opacity *= (1 - 0.3 * heartFocus);
-      cmat.opacity *= (1 - 0.45 * pp);   // panic: dimmer additive so points read as discrete shards, not a glowing red cloud
+      cmat.opacity *= (1 - 0.15 * pp);   // panic: keep the flashing lattice fairly bright
       cmat.opacity *= (1 - 0.38 * restTone);   // restart: softer / smokier strand + orbital
 
       // per-particle cloud colour: boot = hydrogen density map (orange core -> purple fringe); neurotype = dim-green hexagon with an orange puzzle piece
@@ -648,6 +651,11 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
           if (tBlock[i] === PURPLE_PIECE) { cCol[k3] = 1; cCol[k3 + 1] = lerp(1, 0.42, asm); cCol[k3 + 2] = lerp(1, 2.2, asm); }   // grey/orange tint * this = violet
           else { cCol[k3] = 1; cCol[k3 + 1] = 1; cCol[k3 + 2] = 1; }
         }
+        cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
+      } else if (pp > 0.05) {   // kernel panic: irregular WHITE flashes of the red lattice, settling to FULLY RED before it morphs to the hydrogen
+        const redden = smoothstep(P - 0.1, P + 0.3, bf), thr = lerp(0.4, 1.05, redden);
+        for (let i = 0; i < N; i++) { const k3 = i * 3, fl = (Math.sin(t * 17 + hash[i] * 40 + i * 0.6) > thr) ? 1 : 0;
+          cCol[k3] = 1; cCol[k3 + 1] = 1 + fl * 6; cCol[k3 + 2] = 1 + fl * 6; }   // tint is red -> flash particles go white, the rest stay red
         cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
       } else if (neuroDimmed) { cCol.fill(1); cgeo.attributes.color.needsUpdate = true; neuroDimmed = false; }
 
