@@ -194,7 +194,7 @@ function makeTargets(N, ids) {
     // honeycomb: snap toward the nearest hex-grid cell centre so the nest reads as CELLS, not a fuzzy disk
     const gy = Math.round(y / (HCELL * 1.5)), ox = (gy & 1) ? HCELL * Math.sqrt(3) / 2 : 0, gx = Math.round((x - ox) / (HCELL * Math.sqrt(3)));
     const cxC = gx * HCELL * Math.sqrt(3) + ox, cyC = gy * HCELL * 1.5;
-    x = lerp(x, cxC, 0.55); y = lerp(y, cyC, 0.55);   // pull 55% toward the cell centre -> visible honeycomb
+    x = lerp(x, cxC, 0.66); y = lerp(y, cyC, 0.66);   // pull hard toward the cell centre -> clear honeycomb cells at every hexagon beat (not just the bright daemon)
     hexLat[i * 3] = x - 8; hexLat[i * 3 + 1] = y; hexLat[i * 3 + 2] = cubeLat[i * 3 + 2] * 0.22;   // fairly flat honeycomb disk (deep layers fanned out under rotation)
   }
   T.daemon = hexLat;   // 04 is the hexagon nest straight away (not another cube)
@@ -461,8 +461,8 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
         for (let j = 0; j < NFam; j++) { const dx = p3[j * 3] - ax, dy = p3[j * 3 + 1] - ay, d = dx * dx + dy * dy; if (d < bd) bd = d; }   // distance to the NEAREST -3 point
         famGone[i] = bd > 49 ? 1 : 0;   // no -3 point within ~7u => this particle is the partner (the one figure -3 lacks); it just FADES in place at the break (no collapse, no edge pile-up)
         fCol[k] = FAM_PURP[0]; fCol[k + 1] = FAM_PURP[1]; fCol[k + 2] = FAM_PURP[2];
-        famOrigin[k] = rand(-85, 85); famOrigin[k + 1] = rand(-65, 65); famOrigin[k + 2] = rand(-45, 45);   // a scattered debris field — the explosion shards coalesce into the drawing
-        famOff[i] = Math.pow(Math.random(), 1.6) * 0.35; }
+        const oa = rand(0, Math.PI * 2), or = rand(135, 215); famOrigin[k] = Math.cos(oa) * or; famOrigin[k + 1] = Math.sin(oa) * or * 0.8; famOrigin[k + 2] = rand(-50, 50);   // stream IN from far outside (like the infall) -> the family is built from the infall, not from the explosion
+        famOff[i] = Math.pow(Math.random(), 1.6) * 0.45; }
       famReady = true;
     } catch (e) { console.warn('family drawing skipped:', e.message); }
 
@@ -679,7 +679,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
         }
         leydi.g.attributes.position.needsUpdate = true;
         leydi.m.color.copy(cPink).lerp(cCold, decay);                  // pink -> cold as it decays
-        leydi.m.opacity = toIn * 0.9 * (1 - smoothstep(P + 0.1, P + 0.6, bf));
+        leydi.m.opacity = toIn * 0.9 * (1 - smoothstep(P + 0.1, P + 0.6, bf)) * (1 - 0.85 * nz);   // fade the heart away during neurotype so the honeycomb is the focus
         if (decay > 0.55 && !leydiFrozen) { leydi.m.map = texSnow; leydi.m.needsUpdate = true; leydiFrozen = true; }
         if (decay < 0.4 && leydiFrozen) { leydi.m.map = texHeart; leydi.m.needsUpdate = true; leydiFrozen = false; }
       }
@@ -687,8 +687,9 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       // children: emerge from cloud at spawn(6), persist, protected, orbit at restart
       // children: own beats (smurf, then boefje); broad ECG heartbeat lanes; calmer at restart
       const orbit = smoothstep(Re - 0.3, Re + 0.1, bf), ampK = lerp(17, 11, orbit), radK = 12;
-      const emJ = smoothstep(Sm - 0.4, Sm + 0.1, bf), opJ = smoothstep(Sm - 0.4, Sm - 0.05, bf) * 0.95;
-      const emB = smoothstep(Bo - 0.4, Bo + 0.1, bf), opB = smoothstep(Bo - 0.4, Bo - 0.05, bf) * 0.95;
+      const neuroDim = 1 - 0.85 * nz;   // fade the kids' heartbeats too during neurotype — only the honeycomb + lobes stay
+      const emJ = smoothstep(Sm - 0.4, Sm + 0.1, bf), opJ = smoothstep(Sm - 0.4, Sm - 0.05, bf) * 0.95 * neuroDim;
+      const emB = smoothstep(Bo - 0.4, Bo + 0.1, bf), opB = smoothstep(Bo - 0.4, Bo - 0.05, bf) * 0.95 * neuroDim;
       ribbon(jose, t, 16, ampK, 0.0, radK, emJ, opJ, jOrigin);
       ribbon(ben, t, -16, ampK, 0.5, radK, emB, opB, bOrigin);
 
@@ -753,9 +754,9 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
 
       // family drawing: ONLY at the kernel panic — once the heart + hexagon explode, the -4 family coalesces FAST out of the shards, then quickly morphs to -3 (partner removed)
       if (famReady) {
-        const famIn = smoothstep(P + 0.02, P + 0.24, bf);                    // appears fast, right out of the explosion
-        const famVis = famIn * (1 - smoothstep(Re - 0.2, Re + 0.12, bf));    // holds briefly, fades as the restart scene forms
-        const swap = smoothstep(P + 0.3, P + 0.7, bf);                       // then the partner dissolves -> -3
+        const famIn = smoothstep(P + 0.05, P + 0.5, bf);                     // streams IN from outside (infall) after the explosion — builds the family
+        const famVis = famIn * (1 - smoothstep(Re - 0.15, Re + 0.12, bf));   // holds, fades as the restart scene forms
+        const swap = smoothstep(P + 0.55, P + 0.85, bf);                     // then the partner dissolves -> -3
         if (famVis > 0.002) {
           for (let i = 0; i < NFam; i++) { const k = i * 3, act = smoothstep(famOff[i], famOff[i] + 0.4, famIn);   // staggered per-particle stream-in
             family.pos[k]     = lerp(famOrigin[k],     famT[k],     act) + Math.sin(t * 0.5 + i) * 0.6;
