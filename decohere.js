@@ -239,6 +239,9 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
     renderer.setSize(innerWidth, innerHeight);
     const scene = new THREE.Scene(); scene.background = new THREE.Color(BEAT_BG.boot);
     const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 2000); camera.position.set(0, 0, 130);
+    // keep the WIDE scenes (orbital at x=-74, helixes to +82) on screen in portrait: pull the camera back so the horizontal extent fits. Desktop (aspect > ~1.15) stays at z=130.
+    const fitCam = () => { const asp = innerWidth / innerHeight; camera.aspect = asp; camera.position.z = Math.max(130, 149 / asp); camera.updateProjectionMatrix(); };
+    fitCam();
 
     const texHex = makeSprite('hex'), texCircle = makeSprite('circle'), texSquare = makeSprite('square'), texHeart = makeSprite('heart'), texSnow = makeSprite('snow'), texStripe = makeSprite('stripe'), texDot = makeSprite('dot');
 
@@ -793,14 +796,15 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       // console: the process log accrues — every beat ALREADY reached is shown (future ones hidden); active line highlighted + blinking cursor; bootstrap expands into the build-log
       if (logLines.length) {
         const cur = (Math.sin(t * 4) > 0) ? ' █' : '';
+        const tail = isMobile ? 6 : 999;   // phone: keep just the last few lines so the log doesn't fill the screen
         for (let i = 0; i < logLines.length; i++) {
           const d = logLines[i];
-          const show = (i <= active);
+          const show = (i <= active) && (i > active - tail);
           if (d._show !== show) { d.style.display = show ? '' : 'none'; d._show = show; }
           if (!show) continue;
           const on = (i === active);
           if (d._on !== on) { d.classList.toggle('on', on); d._on = on; }
-          if (i === idx.bootstrap) {   // bootstrap entry IS the build-log: reveals progressively while active, then stays in full as part of the accrued log
+          if (i === idx.bootstrap && !isMobile) {   // desktop: bootstrap entry IS the build-log (reveals, then stays full). Phone: keep it one line to save space
             const n = (active > i) ? COMPILE.length : Math.floor(smoothstep(Bs - 0.5, Bs + 0.4, bf) * COMPILE.length);
             d.textContent = COMPILE.slice(0, Math.max(1, n)).join('\n') + (on && n < COMPILE.length ? ' █' : '');
           } else {
@@ -823,7 +827,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       requestAnimationFrame(frame);
     }
 
-    function onResize() { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); calcCenters(); }
+    function onResize() { fitCam(); renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); calcCenters(); }
     addEventListener('resize', onResize); calcCenters(); addEventListener('load', calcCenters); setTimeout(calcCenters, 600);
     function raf(time) { lenis.raf(time); requestAnimationFrame(raf); }
     requestAnimationFrame(raf); requestAnimationFrame(frame);
