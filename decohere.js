@@ -133,6 +133,7 @@ function makeSprite(kind) {
   x.translate(s / 2, s / 2); x.fillStyle = '#fff'; x.strokeStyle = '#fff'; x.lineWidth = 5; x.lineCap = 'round';
   const R = 24;
   if (kind === 'hex') { x.beginPath(); for (let i = 0; i < 6; i++) { const a = Math.PI / 6 + i * Math.PI / 3, px = Math.cos(a) * R, py = Math.sin(a) * R; i ? x.lineTo(px, py) : x.moveTo(px, py); } x.closePath(); x.fill(); }
+  else if (kind === 'spikehex') { x.beginPath(); for (let i = 0; i < 12; i++) { const a = Math.PI / 6 + i * Math.PI / 6, rr = (i % 2 === 0) ? R : R * 0.4, px = Math.cos(a) * rr, py = Math.sin(a) * rr; i ? x.lineTo(px, py) : x.moveTo(px, py); } x.closePath(); x.fill(); }   // 6 sharp spikes at the hexagon vertices, valleys caving in
   else if (kind === 'circle') { x.beginPath(); x.arc(0, 0, R * 0.92, 0, 7); x.fill(); }
   else if (kind === 'square') { x.fillRect(-R * 0.78, -R * 0.78, R * 1.56, R * 1.56); }
   else if (kind === 'heart') { x.beginPath(); x.moveTo(0, R * 0.66); x.bezierCurveTo(R * 1.12, -R * 0.18, R * 0.5, -R * 0.96, 0, -R * 0.22); x.bezierCurveTo(-R * 0.5, -R * 0.96, -R * 1.12, -R * 0.18, 0, R * 0.66); x.fill(); }
@@ -259,7 +260,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
     const fitCam = () => { const asp = innerWidth / innerHeight; camera.aspect = asp; camera.position.z = Math.max(130, 149 / asp); camera.updateProjectionMatrix(); };
     fitCam();
 
-    const texHex = makeSprite('hex'), texCircle = makeSprite('circle'), texSquare = makeSprite('square'), texHeart = makeSprite('heart'), texSnow = makeSprite('snow'), texStripe = makeSprite('stripe'), texDot = makeSprite('dot');
+    const texHex = makeSprite('hex'), texSpike = makeSprite('spikehex'), texCircle = makeSprite('circle'), texSquare = makeSprite('square'), texHeart = makeSprite('heart'), texSnow = makeSprite('snow'), texStripe = makeSprite('stripe'), texDot = makeSprite('dot');
 
     /* Vincent cloud (hexagons) */
     const targets = makeTargets(N, ids);
@@ -270,7 +271,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
     const introPos = new Float32Array(N * 3);
     for (let i = 0; i < N; i++) { introPos[i * 3] = rand(-140, 140); introPos[i * 3 + 1] = rand(-82, 82); introPos[i * 3 + 2] = rand(-40, 40); }
     const cgeo = new THREE.BufferGeometry(); cgeo.setAttribute('position', new THREE.BufferAttribute(live, 3));
-    const cmat = new THREE.PointsMaterial({ map: texHex, color: VINCENT_TINT.boot, size: isMobile ? 1.7 : 1.5, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, alphaTest: 0.02, sizeAttenuation: true });
+    const cmat = new THREE.PointsMaterial({ map: texSpike, color: VINCENT_TINT.boot, size: isMobile ? 1.7 : 1.5, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, alphaTest: 0.02, sizeAttenuation: true });
     const cloud = new THREE.Points(cgeo, cmat); scene.add(cloud);
     // per-particle brightness (vertex colour multiplies cmat tint) — used to light ONLY the neurotype lobes
     const cCol = new Float32Array(N * 3).fill(1);
@@ -522,7 +523,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
     /* post */
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
-    const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.8, 0.5, 0.0); composer.addPass(bloom);
+    const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.8, 0.5, 0.35); composer.addPass(bloom);
     const rgb = new ShaderPass(RGBShiftShader); rgb.uniforms.amount.value = 0; composer.addPass(rgb);
 
     /* scroll */
