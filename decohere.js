@@ -785,7 +785,6 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       // console: the process log accrues — every beat ALREADY reached is shown (future ones hidden); active line highlighted + blinking cursor; bootstrap expands into the build-log
       if (logLines.length) {
         const cur = (Math.sin(t * 4) > 0) ? ' █' : '';
-        const bp = smoothstep(Bs - 0.55, Bs + 0.4, bf) * (1 - smoothstep(Bs + 0.5, Bs + 0.9, bf));
         for (let i = 0; i < logLines.length; i++) {
           const d = logLines[i];
           const show = (i <= active);
@@ -793,9 +792,9 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
           if (!show) continue;
           const on = (i === active);
           if (d._on !== on) { d.classList.toggle('on', on); d._on = on; }
-          if (i === idx.bootstrap && bp > 0.02) {
-            const shown = Math.floor(smoothstep(Bs - 0.5, Bs + 0.4, bf) * COMPILE.length);
-            d.textContent = COMPILE.slice(0, shown).join('\n') + (shown < COMPILE.length ? ' █' : '');
+          if (i === idx.bootstrap) {   // bootstrap entry IS the build-log: reveals progressively while active, then stays in full as part of the accrued log
+            const n = (active > i) ? COMPILE.length : Math.floor(smoothstep(Bs - 0.5, Bs + 0.4, bf) * COMPILE.length);
+            d.textContent = COMPILE.slice(0, Math.max(1, n)).join('\n') + (on && n < COMPILE.length ? ' █' : '');
           } else {
             d.textContent = (LOG[ids[i]] || '') + (on ? cur : '');
           }
