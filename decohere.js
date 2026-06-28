@@ -187,16 +187,19 @@ function makeTargets(N, ids) {
   // the gen filled T.daemon with a CUBE lattice; keep it as the internal source for both the hexagon nest and the bootstrap cube
   const cubeLat = T.daemon;
   // hexagon nest derived from the cube lattice -> per-particle correlated, so cube(03) -> hexagon(04) is a clean reshape (the solid cube folds into the nest)
-  const HCELL = 4.6, hexLat = new Float32Array(N * 3);
+  const HCELL = 4.6, hexLat = new Float32Array(N * 3), hexLoose = new Float32Array(N * 3);
   for (let i = 0; i < N; i++) {
     let x = cubeLat[i * 3] * 0.72, y = cubeLat[i * 3 + 1] * 0.72;
     if (!hexInside(x, y, 34)) { const a = Math.atan2(y, x), seg = ((a % (Math.PI / 3)) + Math.PI / 3) % (Math.PI / 3) - Math.PI / 6, rad = 34 * (Math.cos(Math.PI / 6) / Math.cos(seg)); x = Math.cos(a) * rad; y = Math.sin(a) * rad; }
+    const z = cubeLat[i * 3 + 2] * 0.22;
+    hexLoose[i * 3] = x - 8; hexLoose[i * 3 + 1] = y; hexLoose[i * 3 + 2] = z;   // pre-snap: the smooth, fuzzy hex DISK (no cells yet) — runtime crystallisation front lerps loose -> snapped
     // honeycomb: snap toward the nearest hex-grid cell centre so the nest reads as CELLS, not a fuzzy disk
     const gy = Math.round(y / (HCELL * 1.5)), ox = (gy & 1) ? HCELL * Math.sqrt(3) / 2 : 0, gx = Math.round((x - ox) / (HCELL * Math.sqrt(3)));
     const cxC = gx * HCELL * Math.sqrt(3) + ox, cyC = gy * HCELL * 1.5;
     x = lerp(x, cxC, 0.66); y = lerp(y, cyC, 0.66);   // pull hard toward the cell centre -> clear honeycomb cells at every hexagon beat (not just the bright daemon)
-    hexLat[i * 3] = x - 8; hexLat[i * 3 + 1] = y; hexLat[i * 3 + 2] = cubeLat[i * 3 + 2] * 0.22;   // fairly flat honeycomb disk (deep layers fanned out under rotation)
+    hexLat[i * 3] = x - 8; hexLat[i * 3 + 1] = y; hexLat[i * 3 + 2] = z;   // fairly flat honeycomb disk (deep layers fanned out under rotation)
   }
+  T._hexLoose = hexLoose;   // exposed for the daemon crystallisation-front animation (not a beat target; never morphed)
   T.daemon = hexLat;   // 04 is the hexagon nest straight away (not another cube)
   T.attach = hexLat; T.spawn_smurf = hexLat; T.spawn_boefje = hexLat;
   // neurotype: keep the hexagon, push 3 wedges forward (brighter via proximity to camera)
@@ -309,6 +312,9 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       [[6, 1], [6, 2], [5, 3], [6, 3]],   // L  (interlocks with the one above)
     ];   // 7 interlocking pieces tile a 7x4 board EXACTLY -> a real filled square (tall cells make it square overall)
     const NTB = BLOCK_CELLS.length, PURPLE_PIECE = 1, CW = 6.6, CH = 13.2;
+    // random fall order for the 7 pieces so they drop ONE BY ONE in a shuffled order (not left->right, which the spatial piece-index would give)
+    const pieceOrder = [...Array(NTB).keys()];
+    for (let i = NTB - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; const tmp = pieceOrder[i]; pieceOrder[i] = pieceOrder[j]; pieceOrder[j] = tmp; }
     const cellWorld = (col, row) => [(col - 3) * CW, (row - 1.5) * CH];
     const CELL_PIECE = {}; BLOCK_CELLS.forEach((cells, pi) => cells.forEach(c => CELL_PIECE[c[0] + ',' + c[1]] = pi));   // (col,row) -> piece
     // square = the bootstrap cube PROJECTED flat onto the 7x4 board: each particle keeps its bootstrap x,y region, so square<->cube is just depth (no scatter) AND bootstrap stays daemon-correlated (03->04 grows into the lattice)
@@ -333,22 +339,21 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
         bootCol[i * 3] = tc.r; bootCol[i * 3 + 1] = tc.g; bootCol[i * 3 + 2] = tc.b;
       }
     }
-    // restart: source = the hydrogen orbital ('pure me'), helix flows out of it and wraps the children. Colour: orbital map on the source, orange on the strand.
-    const REST_HEX = Math.floor(0.66 * N), restCol = new Float32Array(N * 3);
+    // restart: the WHOLE cloud becomes the hydrogen orbital ('pure me'), 1:1 with the boot orbital -> the hexagon->hydrogen morph is clean (everything goes left, nothing splits off). The helix is a SEPARATE fed stream (helixP below).
+    const restCol = new Float32Array(N * 3);
     for (let i = 0; i < N; i++) {
-      if (i < REST_HEX) {
-        const s = Math.min(N - 1, Math.floor(i / REST_HEX * N)) * 3, k = i * 3;
-        targets.restart[k] = -74 + targets.boot[s]; targets.restart[k + 1] = targets.boot[s + 1]; targets.restart[k + 2] = targets.boot[s + 2];   // exact boot orbital shape (no stretch) -> as tight + defined as the boot sequence
-        const ry = targets.restart[k + 1];
-        let nb = Math.exp(-Math.pow((Math.abs(ry) - 16) / 9, 2)) * 0.7;   // purple emphasis at the heartbeat heights (~+-16)
-        nb *= clamp01(1 - bootCol[s + 1] * 1.3);   // ...but ONLY on the already-dim regions, so the bright yellow lobes run uncut to the middle
-        restCol[k] = bootCol[s] + (0.416 - bootCol[s]) * nb; restCol[k + 1] = bootCol[s + 1] + (0.173 - bootCol[s + 1]) * nb; restCol[k + 2] = bootCol[s + 2] + (0.788 - bootCol[s + 2]) * nb;
-      } else {   // strand = a mix of yellow and purple particles with varying density (bands), springing from the lobe
-        const e = smoothstep(0, 0.3, (i - REST_HEX) / (N - REST_HEX)), pf = 0.32 + 0.26 * Math.sin(i * 0.03);   // purple fraction oscillates along the strand
-        if (hash2[i] < pf) { restCol[i * 3] = 0.416; restCol[i * 3 + 1] = 0.173; restCol[i * 3 + 2] = 0.788; }   // purple
-        else { restCol[i * 3] = 1.0; restCol[i * 3 + 1] = 0.85 + (0.5 - 0.85) * e; restCol[i * 3 + 2] = 0.4 + (0.14 - 0.4) * e; }   // yellow -> orange
-      }
+      const s = i * 3, k = i * 3;
+      targets.restart[k] = -74 + targets.boot[s]; targets.restart[k + 1] = targets.boot[s + 1]; targets.restart[k + 2] = targets.boot[s + 2];   // exact boot orbital shape, shifted to the left ('pure me')
+      const ry = targets.restart[k + 1];
+      let nb = Math.exp(-Math.pow((Math.abs(ry) - 16) / 9, 2)) * 0.7;   // purple emphasis at the heartbeat heights (~+-16)
+      nb *= clamp01(1 - bootCol[s + 1] * 1.3);   // ...only on the already-dim regions, so the bright yellow lobes run uncut to the middle
+      restCol[k] = bootCol[s] + (0.416 - bootCol[s]) * nb; restCol[k + 1] = bootCol[s + 1] + (0.173 - bootCol[s + 1]) * nb; restCol[k + 2] = bootCol[s + 2] + (0.788 - bootCol[s + 2]) * nb;
+      // keep the YELLOW lobes prominent — they were getting lost under the purple + the restart dimming. Boost where it's yellow, and stretch the yellow band a bit higher up the lobes.
+      const yel = smoothstep(0.42, 0.78, bootCol[s + 1]) * (1 - nb);
+      restCol[k] += yel * 0.45; restCol[k + 1] += yel * 0.4; restCol[k + 2] *= (1 - yel * 0.55);
     }
+    // indices of the PURPLE hydrogen particles (the heartbeat-height purple bands) — the partner merges ONTO these exact positions so it becomes part of the hydrogen, not a separate blob
+    const purpIdx = []; for (let i = 0; i < N; i++) if (restCol[i * 3 + 2] > 0.55 && restCol[i * 3 + 1] < 0.5) purpIdx.push(i);
     // per-particle activation time so the cloud forms unevenly: a few points snap bright first, then more fill in
     const formOff = new Float32Array(N); for (let i = 0; i < N; i++) formOff[i] = Math.pow(Math.random(), 1.6) * 0.62;
     const FW = 0.32;   // per-particle activation window
@@ -419,7 +424,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
     for (let i = 0; i < NL; i++) { woven.push(inSphere(44)); lA[i] = Math.random() * Math.PI * 2; lR[i] = Math.sqrt(Math.random()); }
     // filled heart silhouette via implicit curve (x^2+y^2-1)^3 - x^2 y^3 < 0
     const heartFill = [];
-    while (heartFill.length < NL) { const x = rand(-1.4, 1.4), y = rand(-1.3, 1.4); if (Math.pow(x * x + y * y - 1, 3) - x * x * y * y * y < 0) heartFill.push([x * 28, y * 28 + 4]); }
+    while (heartFill.length < NL) { const x = rand(-1.4, 1.4), y = rand(-1.3, 1.4); if (Math.pow(x * x + y * y - 1, 3) - x * x * y * y * y < 0) { const keep = lerp(0.4, 1.0, clamp01((x + 1.4) / 2.8)); if (Math.random() < keep) heartFill.push([x * 28, y * 28 + 4]); } }   // density GRADIENT: sparser on the left, denser on the right
     // children originate from ACTUAL points on the heart silhouette (x=14) and the Vincent hexagon-cloud (the real hexLat points, x=-8)
     const hexT = targets.spawn_smurf, nHex = hexT.length / 3;   // the Vincent hexagon cloud shape
     const mkOrigin = (n) => { const s = new Float32Array(n * 3); for (let i = 0; i < n; i++) {
@@ -452,7 +457,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
     // family drawing: streams in after the 2nd child (low in the viewport), holds through neurotype, then at kernel_panic the partner is removed (-4 -> -3) with everyone else staying put
     const NFam = isMobile ? 1200 : 3000;
     const family = ent(NFam, texDot, 0xffffff, isMobile ? 2.8 : 2.5);   // white base; per-particle colour/alpha via fCol so the partner can fade out individually
-    const famT = new Float32Array(NFam * 3), famOrigin = new Float32Array(NFam * 3), famOff = new Float32Array(NFam), famGone = new Uint8Array(NFam);
+    const famT = new Float32Array(NFam * 3), famOrigin = new Float32Array(NFam * 3), famOff = new Float32Array(NFam), famGone = new Uint8Array(NFam), famMerge = new Float32Array(NFam * 3);
     const fCol = new Float32Array(NFam * 3); family.g.setAttribute('color', new THREE.BufferAttribute(fCol, 3)); family.m.vertexColors = true; family.m.needsUpdate = true;
     const FAM_PURP = [0.61, 0.36, 1.0];   // 0x9b5cff
     let famReady = false;
@@ -465,10 +470,41 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
         for (let j = 0; j < NFam; j++) { const dx = p3[j * 3] - ax, dy = p3[j * 3 + 1] - ay, d = dx * dx + dy * dy; if (d < bd) bd = d; }   // distance to the NEAREST -3 point
         famGone[i] = bd > 49 ? 1 : 0;   // no -3 point within ~7u => this particle is the partner (the one figure -3 lacks); it just FADES in place at the break (no collapse, no edge pile-up)
         fCol[k] = FAM_PURP[0]; fCol[k + 1] = FAM_PURP[1]; fCol[k + 2] = FAM_PURP[2];
-        const oa = rand(0, Math.PI * 2), or = rand(135, 215); famOrigin[k] = Math.cos(oa) * or; famOrigin[k + 1] = Math.sin(oa) * or * 0.8; famOrigin[k + 2] = rand(-50, 50);   // stream IN from far outside (like the infall) -> the family is built from the infall, not from the explosion
-        famOff[i] = Math.pow(Math.random(), 1.6) * 0.45; }
+        const oa = rand(0, Math.PI * 2), or = rand(35, 175); famOrigin[k] = 14 + Math.cos(oa) * or; famOrigin[k + 1] = 6 + Math.sin(oa) * or * 0.85; famOrigin[k + 2] = rand(-55, 55);   // burst OUT of the (exploding blue heart at 14,6) -> the family is built from the shattered heart
+        famOff[i] = Math.pow(Math.random(), 1.6) * 0.45;
+        // the PARTNER (famGone) doesn't just vanish: it MERGES onto the actual PURPLE hydrogen particles (so it becomes part of 'pure me', not a separate blob)
+        const ph = purpIdx.length ? purpIdx[(Math.random() * purpIdx.length) | 0] * 3 : k; famMerge[k] = targets.restart[ph] + rand(-2, 2); famMerge[k + 1] = targets.restart[ph + 1] + rand(-2, 2); famMerge[k + 2] = targets.restart[ph + 2] + rand(-2, 2); }
       famReady = true;
     } catch (e) { console.warn('family drawing skipped:', e.message); }
+
+    // helix: a SEPARATE stream FED from the hydrogen — two mirrored spirals the NEW particles trace OUT of the hydrogen, wrapping the heartbeats. (The main cloud is now purely the hydrogen, so the morph stays clean.)
+    const NH = isMobile ? 1300 : 3200;
+    const helixP = ent(NH, texDot, 0xffffff, isMobile ? 3.4 : 3.0);   // bigger soft dots -> smokier strand
+    const hCol = new Float32Array(NH * 3); helixP.g.setAttribute('color', new THREE.BufferAttribute(hCol, 3)); helixP.m.vertexColors = true; helixP.m.color.setHex(0xffffff); helixP.m.needsUpdate = true;
+    const hBase = new Float32Array(NH * 3), hTop = new Int8Array(NH), hHj = new Float32Array(NH), hOff = new Float32Array(NH * 3);   // hBase = strand colour; hOff = tube cross-section offset direction (fuzzy tube)
+    for (let i = 0; i < NH; i++) {
+      hTop[i] = (i % 2 === 0) ? 1 : -1;             // which heartbeat it wraps
+      hHj[i] = Math.random();
+      const o = inSphere(1); hOff[i * 3] = o[0]; hOff[i * 3 + 1] = o[1]; hOff[i * 3 + 2] = o[2];
+      const e = smoothstep(0, 0.3, i / NH);
+      if (Math.random() < 0.32 + 0.26 * Math.sin(i * 0.03)) { hBase[i * 3] = 0.416; hBase[i * 3 + 1] = 0.173; hBase[i * 3 + 2] = 0.788; }   // purple bands
+      else { hBase[i * 3] = 1.0; hBase[i * 3 + 1] = 0.85 + (0.5 - 0.85) * e; hBase[i * 3 + 2] = 0.4 + (0.14 - 0.4) * e; }                    // yellow -> orange
+    }
+    // helix HOSE centreline at along-path position v (v=0 at the hydrogen end, v=1 at the far tip) for one strand. COIL radius is FIXED (original 'fine' hose); the TUBE thickness is added per-particle in the loop.
+    const helixPos = (v, top) => {
+      const dir = top > 0 ? -1 : 1, ang = v * Math.PI * 14 * dir;
+      const radBase = smoothstep(0, 0.04, v) * (11 + 12 * v);   // COIL radius (the spiral circle) — fixed, not grown
+      const gap = lerp(3, -16, smoothstep(0.96, 1.0, v)), ay = top * lerp(24, radBase + gap, smoothstep(0.05, 0.4, v));
+      return [-74 + v * 156, ay + Math.sin(ang) * radBase, Math.cos(ang) * radBase];
+    };
+    let helixFlowT = 0, helixFlowStart = -1;   // flow clock: particles are generated on the LEFT (hydrogen) and flow RIGHT through the hose; starts once the hydrogen scene has STOOD
+
+    // bootstrap: green/purple LIGHTNING crackling INSIDE the (still orange) cube — charging / preparing it to become the hexagon. Separate additive layer so it reads as light ON the orange, not a recolour.
+    const NLB = isMobile ? 8 : 14, NLP = isMobile ? 22 : 34, NLight = NLB * NLP;
+    const lightning = ent(NLight, texDot, 0xffffff, isMobile ? 3.4 : 3.2);
+    const lCol = new Float32Array(NLight * 3); lightning.g.setAttribute('color', new THREE.BufferAttribute(lCol, 3)); lightning.m.vertexColors = true; lightning.m.color.setHex(0xffffff); lightning.m.needsUpdate = true;
+    const lBolt = [];
+    for (let b = 0; b < NLB; b++) lBolt.push({ a: inSphere(24), b: inSphere(24), col: (b % 2 === 0) ? [0.25, 1.0, 0.45] : [0.72, 0.32, 1.0], ph: Math.random() });   // alternating green / purple bolts
 
     // warm SUNRISE behind the final (restart) scene — a SMALL sun: soft halo + a star-burst of godray spikes
     const haloC = document.createElement('canvas'); haloC.width = haloC.height = 128;
@@ -480,7 +516,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       for (let k = 0; k < 6; k++) { g.save(); g.rotate(k * Math.PI / 3); const sg = g.createLinearGradient(0, 0, 0, -126); sg.addColorStop(0, 'rgba(255,224,170,0.85)'); sg.addColorStop(1, 'rgba(255,180,90,0)'); g.fillStyle = sg; g.beginPath(); g.moveTo(-5, 0); g.lineTo(0, -126); g.lineTo(5, 0); g.closePath(); g.fill(); g.restore(); }   // godray spikes
     }
     const mkSun = (cv, sc) => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false })); s.scale.set(sc, sc, 1); scene.add(s); return s; };
-    const sunHalo = mkSun(haloC, 220), sunStar = mkSun(starC, 145);   // small sun (was 460)
+    const sunHalo = mkSun(haloC, 120), sunStar = mkSun(starC, 82);   // small sun (460 -> 220/145 -> 160/110 -> smaller still)
     let sunRise = 0;   // time-eased rise progress (so the sun keeps arcing up while you sit at the ending, not just on scroll)
 
     /* post */
@@ -557,7 +593,6 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       const ease = f, cen = 1 - 2 * Math.min(f, 1 - f);   // (scroll dwell handled in beatFrom)
       const pp = Math.max(0, 1 - Math.abs(bf - P) / 0.95);                 // kernel-panic proximity
       const restartFlow = smoothstep(Re - 1, Re, bf);
-      const helixFlow = smoothstep(Re - 0.32, Re - 0.02, bf);   // the helix spirals only flow OUT after the hydrogen orbital has formed
       const cloudShow = smoothstep(idx.boot - 0.72, idx.boot + 0.22, bf);   // boot coalesces gradually as the infall feeds it (birth FROM the infall) — wide ramp = slow grow
       const bootForm = cloudShow;                                                     // per-particle activation reads this (0->1)
       const bootTone = 1 - smoothstep(idx.boot + 0.15, idx.boot + 0.75, bf);          // orbital colours (white tint + density map) through boot, fade into the grey house
@@ -565,35 +600,39 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       const restTone = smoothstep(Re - 0.7, Re - 0.15, bf);   // restart: hydrogen orbital + orange-strand colours
       const sweepTone = smoothstep(idx.daemon - 0.5, idx.daemon - 0.05, bf) * (1 - smoothstep(Ne + 0.05, Ne + 0.6, bf));   // green->purple node-sweep: runs daemon -> children -> THROUGH neurotype (under the yellow lobes), fades into panic
       const hexDark = smoothstep(A - 0.6, A - 0.1, bf);   // hexagon goes DARK from attach (bind_partner) onward, like the neurotype base — so the purple sweep + family drawing pop (daemon CUBE stays bright: hexDark=0 there)
+      // honeycomb crystallisation: only around the daemon beat — the lattice GEOMETRY reorganises as traveling bands of snapped cells flow L->R (cellular-automaton wave), then settles to the static honeycomb by attach
+      const dm = idx.daemon, cryst = smoothstep(Bs + 0.4, dm - 0.2, bf) * (1 - smoothstep(dm + 0.25, A - 0.05, bf));
+      const bsTech = smoothstep(Bs - 0.45, Bs - 0.05, bf) * (1 - smoothstep(Bs + 0.3, dm - 0.1, bf));   // bootstrap cube: technical green/purple "compile" scan, signifying the cube being shaped into the hexagon
       const t0 = targets[ids[i0]], t1 = targets[ids[i1]];
       const cdStagger = (i0 === idx.core_dump);   // street -> cube: convert particles at staggered times for street/cube overlap
       const sxHold = (i0 === idx.syntax_error), sxEase = smoothstep(0.34, 1.0, f);   // hold the complete house briefly (forbidden sits over it) before morphing to the street
       for (let i = 0; i < N; i++) {
         const k = i * 3;
         let x, y, z;
-        if (cdStagger) {   // street gathers straight into the blocks at their final SQUARE positions, then the square diffuses into the cube
-          const b = tBlock[i];
-          const p1 = smoothstep(0.05 + b * 0.06, 0.46 + b * 0.06, f);   // pieces assemble into the square in sequence (one block after another)
-          const p3 = smoothstep(0.72, 1.0, f);                         // the filled square then diffuses into the solid cube
-          x = lerp(lerp(t0[k], tetSquare[k], p1), t1[k], p3); y = lerp(lerp(t0[k + 1], tetSquare[k + 1], p1), t1[k + 1], p3); z = lerp(lerp(t0[k + 2], tetSquare[k + 2], p1), t1[k + 2], p3);
+        if (cdStagger) {   // street gathers into each 4-cell TETROMINO block, which then DROPS into place (staggered, shuffled order), then the filled square diffuses into the cube
+          const b = pieceOrder[tBlock[i]];   // shuffled drop slot -> blocks fall one by one in random order, not left->right
+          const s0 = 0.05 + b * 0.055;
+          const g1 = smoothstep(s0, s0 + 0.16, f);            // street particles GATHER into the 4-cell block shape, floating above the slot
+          const g2 = smoothstep(s0 + 0.16, s0 + 0.34, f);     // then the whole block DROPS straight down into its slot (tetris)
+          const p3 = smoothstep(0.80, 1.0, f);                // the filled square then diffuses into the solid cube
+          const DROP = 64;                                    // block forms this far above its final row, then falls
+          const gx = lerp(t0[k], tetSquare[k], g1), gy = lerp(t0[k + 1], tetSquare[k + 1] + DROP, g1), gz = lerp(t0[k + 2], tetSquare[k + 2], g1);
+          const dxp = gx, dyp = lerp(gy, tetSquare[k + 1], g2), dzp = gz;   // drop = just the Y falling from spawn to the cell
+          x = lerp(dxp, t1[k], p3); y = lerp(dyp, t1[k + 1], p3); z = lerp(dzp, t1[k + 2], p3);
         } else {
           const e = sxHold ? sxEase : ease;
           x = lerp(t0[k], t1[k], e); y = lerp(t0[k + 1], t1[k + 1], e); z = lerp(t0[k + 2], t1[k + 2], e);
         }
-        if (restartFlow > 0) {
-          if (i / N >= 0.66) {   // two small fuzzy helixes, one per heartbeat: each springs from a yellow lobe and wraps its child
-            const top = (i % 2 === 0) ? 1 : -1, dir = top > 0 ? -1 : 1, v = (((i / N) - 0.66) / 0.34 + t * 0.01) % 1, ang = v * Math.PI * 14 * dir;
-            const radBase = smoothstep(0, 0.04, v) * (11 + 12 * v), rad = radBase + Math.sin(t * 0.35 + i * 0.3) * 1.6 * hash[i];   // wider first loop, grows toward the end; gentler shimmer
-            const gap = lerp(3, -16, smoothstep(0.96, 1.0, v));   // just-not-touching; cross only at the very end past the heartbeats
-            const ay = top * lerp(24, radBase + gap, smoothstep(0.05, 0.4, v));
-            const hx = -74 + v * 156 + Math.sin(t * 0.25 + i) * 1.6, hy = ay + Math.sin(ang) * rad, hz = Math.cos(ang) * rad;
-            const ccx = -74 + (hash[i] - 0.5) * 34, ccy = (hash2[i] - 0.5) * 34, ccz = (hash[i] - 0.5) * 34;   // collapsed inside the hydrogen first (only the hydrogen forms), then flows out
-            x = lerp(x, lerp(ccx, hx, helixFlow), restartFlow); y = lerp(y, lerp(ccy, hy, helixFlow), restartFlow); z = lerp(z, lerp(ccz, hz, helixFlow), restartFlow);
-          } else {   // the hydrogen orbital is ALIVE but CALM: gentle slow swirl + a soft shallow breathe (settled, not frantic)
-            const cx = -74, dx = x - cx, a = t * 0.13 + y * 0.012, ca = Math.cos(a), sa = Math.sin(a), br = 1 + 0.035 * Math.sin(t * 0.5 + i * 0.012) * restartFlow;
-            const rx = dx * ca - z * sa, rz = dx * sa + z * ca;   // steady swirl; fade the DISPLACEMENT (not the angle) by restartFlow so scrolling in can't sweep through many turns
-            x = cx + lerp(dx, rx, restartFlow) * br; z = lerp(z, rz, restartFlow) * br; y = y * br;
-          }
+        if (restartFlow > 0) {   // the WHOLE cloud is the hydrogen 'pure me' now (helix is a separate fed stream). ALIVE but CALM: a soft shallow breathe only — NO rotation, so the hexagon doesn't spin or split as it morphs into the hydrogen
+          const cx = -74, dx = x - cx, br = 1 + 0.03 * Math.sin(t * 0.5 + i * 0.012) * restartFlow;
+          x = cx + dx * br; z = z * br; y = y * br;
+        }
+        if (cryst > 0.002) {   // honeycomb crystallisation front: traveling bands of snapped cells flow L->R through the looser hex disk, so the geometry reorganises in an organic wave
+          const hl = targets._hexLoose;
+          const wave = 0.5 + 0.5 * Math.sin(hl[k] * 0.16 - t * 1.1);    // bands sweep left->right across the lattice
+          const snap = lerp(0.62, 1.0, wave);                          // crest = crisp honeycomb cells, trough = slightly looser (stays clearly honeycomb, just breathes/reorganises)
+          const bx = lerp(hl[k], x, snap), by = lerp(hl[k + 1], y, snap), bz = lerp(hl[k + 2], z, snap);
+          x = lerp(x, bx, cryst); y = lerp(y, by, cryst); z = lerp(z, bz, cryst);
         }
         if (nz > 0.005 && isFwd[i] && hash[i] < 0.6) {                 // a subset of the lit lobe particles tether back to the lattice
           const flatZ = targets.spawn_smurf[k + 2];                    // this particle's flat hexLat z
@@ -604,7 +643,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
         live[k] = x + Math.sin(t * 0.5 + i) * wob; live[k + 1] = y + Math.cos(t * 0.4 + i * 1.3) * wob; live[k + 2] = z + Math.sin(t * 0.3 + i * 0.7) * wob;
       }
       cgeo.attributes.position.needsUpdate = true;
-      cloud.rotation.y = Math.sin(t * 0.4) * 0.3 * cen * (1 - restartFlow) * (1 - pp);   // settle -> gentle rotate; no coherent rotation during panic
+      cloud.rotation.y = Math.sin(t * 0.4) * 0.3 * cen * (1 - restartFlow) * (1 - pp) * (1 - smoothstep(P - 0.6, P - 0.2, bf));   // settle -> gentle rotate; rotation fully OFF from just before the panic through the hexagon->hydrogen morph (no spin while it becomes the hydrogen)
       cloud.rotation.x = 0;
       // (panic keeps the hexagon sprites now — the lattice flashes + waves rather than shattering into points)
 
@@ -617,14 +656,16 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       const heartFocus = smoothstep(A - 0.4, A, bf) * (1 - smoothstep(Sm - 0.1, Sm + 0.4, bf));   // gentle dim for Venn read
       cmat.opacity *= (1 - 0.3 * heartFocus);
       cmat.opacity *= (1 - 0.15 * pp);   // panic: keep the flashing lattice fairly bright
-      cmat.opacity *= (1 - 0.38 * restTone);   // restart: softer / smokier strand + orbital
+      cmat.opacity *= (1 - 0.4 * restTone);   // restart: softer (the hydrogen is the whole cloud now) but still clearly present — not a blinding vlek, not too faint either
+      cmat.size = (isMobile ? 1.7 : 1.5) * (1 - 0.12 * restTone);   // only slightly smaller at restart
+      cmat.opacity *= (1 - 0.28 * bsTech);   // dim the orange cube a touch while the lightning crackles, so the green/purple reads
 
       // per-particle cloud colour: boot = hydrogen density map (orange core -> purple fringe); neurotype = dim-green hexagon with an orange puzzle piece
       if (bootTone > 0.005) {
         for (let i = 0; i < N; i++) { const k3 = i * 3, act = smoothstep(formOff[i], formOff[i] + FW, bootForm); cCol[k3] = (1 + (bootCol[k3] - 1) * bootTone) * act; cCol[k3 + 1] = (1 + (bootCol[k3 + 1] - 1) * bootTone) * act; cCol[k3 + 2] = (1 + (bootCol[k3 + 2] - 1) * bootTone) * act; }
         cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
       } else if (restTone > 0.005) {
-        for (let i = 0; i < N; i++) { const k3 = i * 3; cCol[k3] = 1 + (restCol[k3] - 1) * restTone; cCol[k3 + 1] = 1 + (restCol[k3 + 1] - 1) * restTone; cCol[k3 + 2] = 1 + (restCol[k3 + 2] - 1) * restTone; }
+        for (let i = 0; i < N; i++) { const k3 = i * 3; cCol[k3] = 1 + (restCol[k3] - 1) * restTone; cCol[k3 + 1] = 1 + (restCol[k3 + 1] - 1) * restTone; cCol[k3 + 2] = 1 + (restCol[k3 + 2] - 1) * restTone; }   // strand particles carry their colour the whole way; they're hidden inside the hydrogen until they stream out into the helix
         cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
       } else if (sweepTone > 0.005) {
         const sweepAmt = smoothstep(idx.daemon - 0.5, idx.daemon - 0.05, bf);               // ramp to full purple sweep BY the daemon centre (was daemon+0.4 = barely 0.1 at centre -> dim purple read as blue)
@@ -649,11 +690,11 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
         }
         cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
       } else if (pp > 0.05) {   // kernel panic: lattice points randomly error — flash WHITE then stay RED — accumulating until the whole hexagon is red (cmat is forced white, so cCol IS the colour)
-        const redden = smoothstep(P - 0.55, P + 0.25, bf);   // fraction of points that have errored
+        const redden = smoothstep(P - 0.62, P - 0.02, bf);   // fraction of points that have errored — ramps to (near) FULLY red BY the panic centre, so the lattice reads red, not half-green
         for (let i = 0; i < N; i++) { const k3 = i * 3, e = hash[i];
-          if (Math.abs(redden - e) < 0.045) { cCol[k3] = 1.6; cCol[k3 + 1] = 1.6; cCol[k3 + 2] = 1.6; }   // WHITE flash at the instant it errors
-          else if (redden > e) { cCol[k3] = 1.0; cCol[k3 + 1] = 0.16; cCol[k3 + 2] = 0.16; }              // errored -> stays RED
-          else { cCol[k3] = 0.12; cCol[k3 + 1] = 0.5; cCol[k3 + 2] = 0.3; }                                // not yet errored -> still green
+          if (Math.abs(redden - e) < 0.028) { cCol[k3] = 1.15; cCol[k3 + 1] = 1.0; cCol[k3 + 2] = 0.55; }   // brief amber-white SPARK at the instant it errors (narrow + dim so it doesn't bloom the scene white)
+          else if (redden > e) { cCol[k3] = 1.3; cCol[k3 + 1] = 0.06; cCol[k3 + 2] = 0.06; }                // errored -> stays deep saturated RED (R boosted, G/B near zero so additive+bloom reads red, not pink/white)
+          else { cCol[k3] = 0.07; cCol[k3 + 1] = 0.24; cCol[k3 + 2] = 0.15; }                                // not yet errored -> dim green (kept dark so the red dominates the read even mid-cascade)
         }
         cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
       } else if (neuroDimmed) { cCol.fill(1); cgeo.attributes.color.needsUpdate = true; neuroDimmed = false; }
@@ -701,8 +742,9 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       // children: own beats (smurf, then boefje); broad ECG heartbeat lanes; calmer at restart
       const orbit = smoothstep(Re - 0.3, Re + 0.1, bf), ampK = lerp(17, 11, orbit), radK = 12;
       const neuroDim = 1 - 0.85 * nz;   // fade the kids' heartbeats too during neurotype — only the honeycomb + lobes stay
-      const emJ = smoothstep(Sm - 0.4, Sm + 0.1, bf), opJ = smoothstep(Sm - 0.4, Sm - 0.05, bf) * 0.95 * neuroDim;
-      const emB = smoothstep(Bo - 0.4, Bo + 0.1, bf), opB = smoothstep(Bo - 0.4, Bo - 0.05, bf) * 0.95 * neuroDim;
+      const panicHush = smoothstep(P - 0.5, P - 0.12, bf) * (1 - smoothstep(Re - 0.45, Re - 0.1, bf));   // children heartbeat ribbons go quiet through the panic so it reads as a clean red hexagon (no stripes); they return as the restart orbit forms
+      const emJ = smoothstep(Sm - 0.4, Sm + 0.1, bf), opJ = smoothstep(Sm - 0.4, Sm - 0.05, bf) * 0.95 * neuroDim * (1 - panicHush);
+      const emB = smoothstep(Bo - 0.4, Bo + 0.1, bf), opB = smoothstep(Bo - 0.4, Bo - 0.05, bf) * 0.95 * neuroDim * (1 - panicHush);
       ribbon(jose, t, 16, ampK, 0.0, radK, emJ, opJ, jOrigin);
       ribbon(ben, t, -16, ampK, 0.5, radK, emB, opB, bOrigin);
 
@@ -711,20 +753,23 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
         const sx = idx.syntax_error;
         const appear = smoothstep(sx - 0.05, sx + 0.12, bf);                       // grows over the held house
         const cloud = smoothstep(sx + 0.16, sx + 0.5, bf);                         // drifts up into a purple CLOUD above the street
-        const fallPhase = smoothstep(sx + 0.55, sx + 0.78, bf);                    // RAINS once the house->street scene reads (purple cloud holds first), then falls fast / all at once
+        const fallPhase = smoothstep(sx + 0.8, sx + 0.96, bf);                     // RAINS only once the house has fully morphed into the STREET scene (bench / lamp / bin reads) — not before; narrow/fast window so the downpour comes all at once
         if (appear > 0.001) {
           const sc = 0.55 + 0.45 * appear;
           for (let i = 0; i < NF; i++) {
-            const fx = forbidPos[i * 3] * sc, fy = forbidPos[i * 3 + 1] * sc, fz = forbidPos[i * 3 + 2] * sc + 16;
-            const cx = (hash[i] - 0.5) * 150, cy = 26 + (hash2[i] - 0.5) * 24, cz = (hash2[i] - 0.5) * 50;   // cloud target above the landscape
-            const started = clamp01((fallPhase - hash[i] * 0.12) * 5);            // nearly all drops start together (small stagger, fast) — no slow left-to-right wave
-            const spd = 0.17 + hash2[i] * 0.6;                                    // each drop's OWN fall speed
-            const cyc = ((t * spd + hash[i] * 9.17) % 1 + 1) % 1;                 // continuous TIME-based sawtooth: the drop falls, wraps at the ground, repeats — real individual drops, not a scroll-locked sheet
-            const yTop = 30 + (hash2[i] - 0.5) * 24, yBot = -46 + (hash[i] - 0.5) * 12, driftX = (hash2[i] - 0.5) * 16 * started;
-            const rainY = lerp(yTop, yBot, cyc);
-            forbid.pos[i * 3] = lerp(lerp(fx, cx, cloud), cx + driftX + Math.sin(t * 0.6 + i) * 0.6, started);
-            forbid.pos[i * 3 + 1] = lerp(lerp(fy, cy, cloud), rainY + Math.cos(t * 0.5 + i) * 0.3, started);
-            forbid.pos[i * 3 + 2] = lerp(fz, cz, cloud);
+            const fx = forbidPos[i * 3] * sc, fy = forbidPos[i * 3 + 1] * sc, fz = forbidPos[i * 3 + 2] * sc + 16;   // the ⊘ sign over the house
+            const rx = (i * 0.6180339887) % 1;                                                                       // even L->R spread, DECORRELATED from the drop-test hash (else all drops land on one side)
+            const cx = (rx - 0.5) * 150, cyTop = 24 + (hash2[i] - 0.5) * 14, cz = (hash2[i] - 0.5) * 50;             // CLOUD: wide band across the WHOLE top, sits HIGH, and STAYS there
+            const started = clamp01((fallPhase - hash[i] * 0.12) * 5);            // small stagger, fast
+            let px = lerp(fx, cx, cloud), py = lerp(fy, cyTop, cloud), pz = lerp(fz, cz, cloud);                      // ⊘ sign -> drifts up into the cloud
+            if (hash[i] < 0.72) {   // ~72% of the cloud sheds as falling drops (rain across the full width); the rest stays as the cloud BODY, so the cloud doesn't stretch down — drops DETACH and fall out of it
+              const spd = 0.5 + hash2[i] * 1.7;                                   // each drop its own fall speed
+              const cyc = ((t * spd + hash[i] * 9.17) % 1 + 1) % 1;              // time loop: drop falls from the cloud bottom, wraps at the ground, repeats
+              const fallY = lerp(cyTop - 3, -46 + (hash[i] - 0.5) * 10, cyc);    // straight DOWN from the cloud to the ground
+              py = lerp(py, fallY + Math.cos(t * 0.5 + i) * 0.3, started);        // only detaches + falls once the rain has started; the cloud body holds position
+              px = lerp(px, cx + Math.sin(t * 0.6 + i) * 0.6, started);          // stays in its own column (no sideways slide of the whole cloud)
+            }
+            forbid.pos[i * 3] = px; forbid.pos[i * 3 + 1] = py; forbid.pos[i * 3 + 2] = pz;
           }
           forbid.g.attributes.position.needsUpdate = true;
         }
@@ -769,36 +814,67 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       if (famReady) {
         const famIn = smoothstep(P + 0.05, P + 0.5, bf);                     // streams IN from outside (infall) after the explosion — builds the family
         const famVis = famIn * (1 - smoothstep(Re - 0.15, Re + 0.12, bf));   // holds, fades as the restart scene forms
-        const swap = smoothstep(P + 0.55, P + 0.85, bf);                     // then the partner dissolves -> -3
+        const merge = smoothstep(P + 0.5, Re - 0.05, bf);                    // the PARTNER travels INTO the purple part of the hydrogen 'pure me' as the restart forms (merged, not just gone)
         if (famVis > 0.002) {
           for (let i = 0; i < NFam; i++) { const k = i * 3, act = smoothstep(famOff[i], famOff[i] + 0.4, famIn);   // staggered per-particle stream-in
-            family.pos[k]     = lerp(famOrigin[k],     famT[k],     act) + Math.sin(t * 0.5 + i) * 0.6;
-            family.pos[k + 1] = lerp(famOrigin[k + 1], famT[k + 1], act) + Math.cos(t * 0.4 + i) * 0.6;
-            family.pos[k + 2] = lerp(famOrigin[k + 2], famT[k + 2], act);
-            const a = famGone[i] ? (1 - swap) : 1;                            // partner particles fade out at the break; everyone else stays at full
-            fCol[k] = FAM_PURP[0] * a; fCol[k + 1] = FAM_PURP[1] * a; fCol[k + 2] = FAM_PURP[2] * a;
+            let px = lerp(famOrigin[k], famT[k], act) + Math.sin(t * 0.5 + i) * 0.6;
+            let py = lerp(famOrigin[k + 1], famT[k + 1], act) + Math.cos(t * 0.4 + i) * 0.6;
+            let pz = lerp(famOrigin[k + 2], famT[k + 2], act);
+            if (famGone[i]) { px = lerp(px, famMerge[k], merge); py = lerp(py, famMerge[k + 1], merge); pz = lerp(pz, famMerge[k + 2], merge); }   // partner merges into the hydrogen purple
+            family.pos[k] = px; family.pos[k + 1] = py; family.pos[k + 2] = pz;
+            fCol[k] = lerp(0.749, FAM_PURP[0], act); fCol[k + 1] = lerp(0.914, FAM_PURP[1], act); fCol[k + 2] = lerp(1.0, FAM_PURP[2], act);   // start as the heart's icy cyan (0xbfe9ff), turn purple as the family forms
           }
           family.g.attributes.position.needsUpdate = true; family.g.attributes.color.needsUpdate = true;
         }
         family.m.opacity = famVis * 0.78;
       }
 
-      // backdrop nest: faint green hex lattice behind the restart orbital with a slow green->purple->green node-sweep
+      // backdrop nest REMOVED from the ending — the green lattice no longer runs behind 'pure me' (Vincent wanted it gone)
+      backdrop.m.opacity = 0;
+
+      // helix HOSE: particles are GENERATED on the LEFT (at the hydrogen) and FLOW RIGHT through the hose. A flow clock starts once the hydrogen scene has STOOD; each particle turns on as the fill-front passes its phase, then keeps flowing right (recycling at the left) -> the hose fills from the left and keeps flowing
+      if (restTone > 0.9) { if (helixFlowStart < 0) helixFlowStart = t; helixFlowT = (t - helixFlowStart) * 0.06; }   // slower flow
+      else { helixFlowStart = -1; helixFlowT = 0; }
       if (restTone > 0.005) {
-        for (let i = 0; i < NB; i++) { const k = i*3, by = backdrop.pos[k+1];
-          const row = Math.floor((by + 50) / 7), speed = 0.07 + ((row * 7) % 11) * 0.011;
-          const band = -56 + ((t * speed + row * 0.17) % 1 + 1) % 1 * 112;
-          const dxb = backdrop.pos[k] + 74 - band, pulse = Math.exp(-dxb * dxb / 130);   // moving sweep band across the nest
-          bCol[k] = 0.13 + 0.50 * pulse; bCol[k+1] = 0.54 - 0.34 * pulse; bCol[k+2] = 0.31 + 0.52 * pulse;   // green 0x218b42 -> purple -> green
+        const tubeR = 1.0 + 4.0 * smoothstep(0, 1.8, helixFlowT);   // TUBE thickness — starts thin, slowly grows (the hose tube WIDENS, not the coil circle)
+        for (let i = 0; i < NH; i++) {
+          const g = i / NH, raw = helixFlowT - g;                 // time since this particle was generated on the left
+          const gen = smoothstep(0, 0.02, raw);                   // off until generated, then stays on
+          const v = raw <= 0 ? 0 : (raw % 1);                     // flows from the left (v=0) to the right (v=1), then recycles
+          const p = helixPos(v, hTop[i]);
+          const wob = Math.sin(t * 0.6 + i) * 0.5;               // gentle smoke movement
+          helixP.pos[i * 3] = p[0] + hOff[i * 3] * tubeR + wob; helixP.pos[i * 3 + 1] = p[1] + hOff[i * 3 + 1] * tubeR; helixP.pos[i * 3 + 2] = p[2] + hOff[i * 3 + 2] * tubeR;
+          const fade = gen * smoothstep(0, 0.04, v) * (1 - smoothstep(0.94, 1.0, v));   // fade in at the left, out at the right tip (hides the recycle wrap)
+          hCol[i * 3] = hBase[i * 3] * fade; hCol[i * 3 + 1] = hBase[i * 3 + 1] * fade; hCol[i * 3 + 2] = hBase[i * 3 + 2] * fade;
         }
-        backdrop.g.attributes.color.needsUpdate = true;
+        helixP.g.attributes.position.needsUpdate = true;
+        helixP.g.attributes.color.needsUpdate = true;
       }
-      backdrop.m.opacity = restTone * 0.42;   // faint, behind the orbital
+      helixP.m.opacity = restTone * 0.72;   // softer / smokier
+
+      // bootstrap lightning: green/purple bolts crackle INSIDE the orange cube (preparing it for the hexagon)
+      if (bsTech > 0.005) {
+        for (let b = 0; b < NLB; b++) {
+          const bolt = lBolt[b], on = Math.max(0, Math.sin(t * 7 + bolt.ph * 6.28)), lit = (0.25 + 0.75 * on * on) * bsTech * 2.6;   // crackle flicker with a baseline + boosted so green/purple reads ON the orange (additive)
+          const seed = Math.floor(t * 2.5 + b * 3.1);   // changes each strike -> the bolt re-jags
+          for (let p = 0; p < NLP; p++) {
+            const k = (b * NLP + p) * 3, s = p / (NLP - 1), env = Math.sin(s * Math.PI);   // env fades the zigzag at the bolt ends
+            lightning.pos[k]     = lerp(bolt.a[0], bolt.b[0], s) + Math.sin(s * 22 + seed * 1.7 + b) * 6 * env;
+            lightning.pos[k + 1] = lerp(bolt.a[1], bolt.b[1], s) + Math.cos(s * 19 + seed * 2.3 + b) * 6 * env;
+            lightning.pos[k + 2] = lerp(bolt.a[2], bolt.b[2], s) + Math.sin(s * 17 + seed) * 4 * env + 14;   // pulled toward the camera so the bolts sit in FRONT of the dense cube, not buried in it
+            lCol[k] = bolt.col[0] * lit; lCol[k + 1] = bolt.col[1] * lit; lCol[k + 2] = bolt.col[2] * lit;
+          }
+        }
+        lightning.g.attributes.position.needsUpdate = true; lightning.g.attributes.color.needsUpdate = true;
+        lightning.m.opacity = bsTech * 0.95;
+      } else if (lightning.m.opacity > 0) lightning.m.opacity = 0;
 
       // bloom + glitch (no camera shake)
-      bloom.strength = light ? 0.04 : Math.max(0.12, 0.6 - 0.36 * bootTone - 0.22 * nz - 0.1 * Math.max(0, hexDark - nz) + 0.18 * smoothstep(Re - 0.4, Re, bf) - 0.4 * pp);   // keep the partner-stage hexagon bright (only a small bloom trim); strong cut stays for boot/neuro/panic/restart
-      rgb.uniforms.amount.value = pp * (0.006 + vel * 0.006);   // stronger glitch at panic
-      { sunRise += ((restTone > 0.4 ? 1 : 0) - sunRise) * 0.012; const ang = lerp(-0.95, 0.66, sunRise), px = 12 + Math.cos(ang) * 100, py = -22 + Math.sin(ang) * 100, op = smoothstep(Re - 0.6, Re, bf), pulse = 1 + 0.06 * Math.sin(t * 0.6);
+      bloom.strength = light ? 0.04 : Math.max(0.12 - 0.07 * pp, 0.6 - 0.36 * bootTone - 0.22 * nz - 0.1 * Math.max(0, hexDark - nz) - 0.18 * restTone - 0.55 * pp);   // panic + restart: trim bloom so neither the red lattice nor the hydrogen blooms into a big white blob (but keep the hydrogen present)
+      rgb.uniforms.amount.value = pp * vel * 0.007;   // RGB-shift glitch ONLY while actively scrolling through the panic — when you dwell it goes to ~0 so the hexagon reads as a clean RED shape, not red/blue split stripes
+      { sunRise += ((restTone > 0.4 ? 1 : 0) - sunRise) * 0.012; const ang = lerp(-0.95, 0.66, sunRise), op = smoothstep(Re - 0.6, Re, bf), pulse = 1 + 0.06 * Math.sin(t * 0.6);
+        const orbX = Math.cos(t * 0.07) * 28 * sunRise, orbY = Math.sin(t * 0.07) * 20 * sunRise;   // the sun ORBITS slowly along an ellipse around its risen position
+        const px = 12 + Math.cos(ang) * 100 + orbX, py = -22 + Math.sin(ang) * 100 + orbY;
         sunHalo.position.set(px, py, -130); sunStar.position.set(px, py, -128);
         sunHalo.material.opacity = op * 0.34 * pulse; sunStar.material.opacity = op * 0.5 * pulse; sunStar.material.rotation += 0.0011; }   // the sun ARCS up on an orbit over time; small godray star slowly turns
 
