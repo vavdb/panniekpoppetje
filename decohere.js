@@ -184,13 +184,20 @@ function makeTargets(N, ids) {
     },
   };
   ids.forEach(id => { T[id] = fill(gens[id] || gens.boot); });
-  // hexagon derived from the daemon lattice -> per-particle correlated, so daemon->hexagon morphs cleanly (no centre blob)
-  const D = T.daemon, hexLat = new Float32Array(N * 3);
+  // the gen filled T.daemon with a CUBE lattice; keep it as the internal source for both the hexagon nest and the bootstrap cube
+  const cubeLat = T.daemon;
+  // hexagon nest derived from the cube lattice -> per-particle correlated, so cube(03) -> hexagon(04) is a clean reshape (the solid cube folds into the nest)
+  const HCELL = 4.6, hexLat = new Float32Array(N * 3);
   for (let i = 0; i < N; i++) {
-    let x = D[i * 3] * 0.72, y = D[i * 3 + 1] * 0.72;
+    let x = cubeLat[i * 3] * 0.72, y = cubeLat[i * 3 + 1] * 0.72;
     if (!hexInside(x, y, 34)) { const a = Math.atan2(y, x), seg = ((a % (Math.PI / 3)) + Math.PI / 3) % (Math.PI / 3) - Math.PI / 6, rad = 34 * (Math.cos(Math.PI / 6) / Math.cos(seg)); x = Math.cos(a) * rad; y = Math.sin(a) * rad; }
-    hexLat[i * 3] = x - 8; hexLat[i * 3 + 1] = y; hexLat[i * 3 + 2] = D[i * 3 + 2] * 0.4;
+    // honeycomb: snap toward the nearest hex-grid cell centre so the nest reads as CELLS, not a fuzzy disk
+    const gy = Math.round(y / (HCELL * 1.5)), ox = (gy & 1) ? HCELL * Math.sqrt(3) / 2 : 0, gx = Math.round((x - ox) / (HCELL * Math.sqrt(3)));
+    const cxC = gx * HCELL * Math.sqrt(3) + ox, cyC = gy * HCELL * 1.5;
+    x = lerp(x, cxC, 0.55); y = lerp(y, cyC, 0.55);   // pull 55% toward the cell centre -> visible honeycomb
+    hexLat[i * 3] = x - 8; hexLat[i * 3 + 1] = y; hexLat[i * 3 + 2] = cubeLat[i * 3 + 2] * 0.22;   // fairly flat honeycomb disk (deep layers fanned out under rotation)
   }
+  T.daemon = hexLat;   // 04 is the hexagon nest straight away (not another cube)
   T.attach = hexLat; T.spawn_smurf = hexLat; T.spawn_boefje = hexLat;
   // neurotype: keep the hexagon, push 3 wedges forward (brighter via proximity to camera)
   const neuro = new Float32Array(N * 3);
@@ -202,11 +209,11 @@ function makeTargets(N, ids) {
   T.neurotype_export = neuro;
   // bootstrap derived from the daemon lattice: a smaller, jittered (less-defined) cube. Each particle keeps its own lattice node,
   // so bootstrap->daemon is a pure grow + sharpen (pattern crystallises) instead of a full reshuffle/mix.
-  const Dd = T.daemon, bs = new Float32Array(N * 3);
+  const bs = new Float32Array(N * 3);
   for (let i = 0; i < N; i++) {
-    bs[i * 3] = Dd[i * 3] * 0.5 + rand(-4.5, 4.5);
-    bs[i * 3 + 1] = Dd[i * 3 + 1] * 0.5 + rand(-4.5, 4.5);
-    bs[i * 3 + 2] = Dd[i * 3 + 2] * 0.5 + rand(-4.5, 4.5);
+    bs[i * 3] = cubeLat[i * 3] * 0.5 + rand(-4.5, 4.5);
+    bs[i * 3 + 1] = cubeLat[i * 3 + 1] * 0.5 + rand(-4.5, 4.5);
+    bs[i * 3 + 2] = cubeLat[i * 3 + 2] * 0.5 + rand(-4.5, 4.5);
   }
   T.bootstrap = bs;
   T.start = new Float32Array(T.boot);   // start = the orbital already at full shape (invisible). It FORMS by gaining opacity + infall density, not by scaling up.
@@ -446,7 +453,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
     const FAM_PURP = [0.61, 0.36, 1.0];   // 0x9b5cff
     let famReady = false;
     try {
-      const FOPT = { scale: 92, refW: 649, x0: -46, y0: -56 };   // shared frame (refW=649 of the -4 image, common left/feet anchor) so -4 and -3 overlay exactly on the kids + dad; sits low but not clipped
+      const FOPT = { scale: 92, refW: 649, x0: -46, y0: -16 };   // shared frame; sits roughly centred (it now emerges from the panic explosion)
       const p4 = await sampleImagePoints('content/vandenbraken-4.png', NFam, FOPT);
       const p3 = await sampleImagePoints('content/vandenbraken-3.png', NFam, FOPT);
       for (let i = 0; i < NFam; i++) { const k = i * 3; famT[k] = p4[k]; famT[k + 1] = p4[k + 1]; famT[k + 2] = p4[k + 2];   // -4 = whole family; everyone stays put
@@ -454,8 +461,8 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
         for (let j = 0; j < NFam; j++) { const dx = p3[j * 3] - ax, dy = p3[j * 3 + 1] - ay, d = dx * dx + dy * dy; if (d < bd) bd = d; }   // distance to the NEAREST -3 point
         famGone[i] = bd > 49 ? 1 : 0;   // no -3 point within ~7u => this particle is the partner (the one figure -3 lacks); it just FADES in place at the break (no collapse, no edge pile-up)
         fCol[k] = FAM_PURP[0]; fCol[k + 1] = FAM_PURP[1]; fCol[k + 2] = FAM_PURP[2];
-        const a = rand(0, Math.PI * 2), r = rand(120, 200); famOrigin[k] = Math.cos(a) * r; famOrigin[k + 1] = Math.sin(a) * r * 0.8; famOrigin[k + 2] = rand(-50, 50);
-        famOff[i] = Math.pow(Math.random(), 1.6) * 0.5; }
+        famOrigin[k] = rand(-85, 85); famOrigin[k + 1] = rand(-65, 65); famOrigin[k + 2] = rand(-45, 45);   // a scattered debris field — the explosion shards coalesce into the drawing
+        famOff[i] = Math.pow(Math.random(), 1.6) * 0.35; }
       famReady = true;
     } catch (e) { console.warn('family drawing skipped:', e.message); }
 
@@ -653,10 +660,10 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
           const dil = 1 + decay * 0.9;                                  // dilate (grow/dilute) before exploding
           const fx = HX + hf[0] * tight * dil, fy = hf[1] * tight * dil;  // FILLED heart silhouette
           const edgeF = Math.min(1, Math.hypot(hf[0], hf[1]) / 34);            // 0 = heart centre, 1 = outer edge
-          const beat = 1 + 0.06 * Math.sin(t * 4) * edgeF * smoothstep(0.5, 0.8, toHeart);   // ONLY the edge breathes on the heartbeat (centre barely moves)
+          const beat = 1 + 0.025 * Math.sin(t * 2.6) * edgeF * smoothstep(0.5, 0.8, toHeart);   // ONLY the edge breathes, gently (centre barely moves)
           const midx = lerp(rx, fx, toHeart) * beat, midy = lerp(ry, fy, toHeart) * beat;
           let tx = lerp(ox, midx, toIn), ty = lerp(oy, midy, toIn), tz = lerp(0, lerp(8, 0, toHeart), toIn);
-          const wobIn = (1 - edgeF) * smoothstep(0.5, 0.9, toHeart) * (1 - decay) * 0.9;   // the inside just wobbles a little (not a full pulse)
+          const wobIn = (1 - edgeF) * smoothstep(0.5, 0.9, toHeart) * (1 - decay) * 0.5;   // the inside just wobbles a touch (not a full pulse)
           tx += Math.sin(t * 2.1 + i * 0.7) * wobIn; ty += Math.cos(t * 1.8 + i * 1.3) * wobIn;
           const dj = decay * 16 * (1 - 0.7 * smoothstep(0.55, 0.95, decay));   // soft jitter, scaled down as the ice spikes grow
           tx += Math.sin(t * 1.6 + i * 1.7) * dj; ty += Math.cos(t * 1.4 + i * 2.1) * dj; tz += Math.sin(t * 1.1 + i) * dj;   // disintegrate
@@ -744,11 +751,11 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       const startVis = 1 - smoothstep(idx.boot - 0.15, idx.boot + 0.5, bf);   // bright while the cloud forms; dims once it's formed
       infall.m.opacity = (0.1 + 0.64 * Math.max(startVis, wander)) * (0.85 + 0.15 * Math.abs(Math.sin(t * 30)));
 
-      // family drawing: infall-stream in after boefje (2nd heartbeat), hold as a soft reveal, fade out before neurotype
+      // family drawing: ONLY at the kernel panic — once the heart + hexagon explode, the -4 family coalesces FAST out of the shards, then quickly morphs to -3 (partner removed)
       if (famReady) {
-        const famIn = smoothstep(Bo + 0.12, Bo + 0.5, bf);
-        const famVis = famIn * (1 - smoothstep(Re - 0.25, Re + 0.15, bf));   // hold through neurotype + the panic, fade only as the restart scene forms
-        const swap = smoothstep(P - 0.2, P + 0.15, bf);                      // at kernel_panic the partner DISSOLVES in place (-> matches vandenbraken-3); kids + dad untouched
+        const famIn = smoothstep(P + 0.02, P + 0.24, bf);                    // appears fast, right out of the explosion
+        const famVis = famIn * (1 - smoothstep(Re - 0.2, Re + 0.12, bf));    // holds briefly, fades as the restart scene forms
+        const swap = smoothstep(P + 0.3, P + 0.7, bf);                       // then the partner dissolves -> -3
         if (famVis > 0.002) {
           for (let i = 0; i < NFam; i++) { const k = i * 3, act = smoothstep(famOff[i], famOff[i] + 0.4, famIn);   // staggered per-particle stream-in
             family.pos[k]     = lerp(famOrigin[k],     famT[k],     act) + Math.sin(t * 0.5 + i) * 0.6;
