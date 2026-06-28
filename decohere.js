@@ -466,11 +466,17 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       famReady = true;
     } catch (e) { console.warn('family drawing skipped:', e.message); }
 
-    // warm SUNRISE glow behind the final (restart) scene — the ending lifts into a dawn
-    const sunC = document.createElement('canvas'); sunC.width = sunC.height = 128;
-    { const g = sunC.getContext('2d'), grd = g.createRadialGradient(64, 64, 0, 64, 64, 64); grd.addColorStop(0, 'rgba(255,228,176,1)'); grd.addColorStop(0.4, 'rgba(255,184,96,0.5)'); grd.addColorStop(1, 'rgba(255,150,60,0)'); g.fillStyle = grd; g.fillRect(0, 0, 128, 128); }
-    const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(sunC), color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
-    sun.scale.set(460, 460, 1); sun.position.set(86, 50, -130); scene.add(sun);   // top-right, behind the scene — a sun rising in the corner
+    // warm SUNRISE behind the final (restart) scene — a SMALL sun: soft halo + a star-burst of godray spikes
+    const haloC = document.createElement('canvas'); haloC.width = haloC.height = 128;
+    { const g = haloC.getContext('2d'), grd = g.createRadialGradient(64, 64, 0, 64, 64, 64); grd.addColorStop(0, 'rgba(255,226,176,0.95)'); grd.addColorStop(0.45, 'rgba(255,180,96,0.32)'); grd.addColorStop(1, 'rgba(255,150,60,0)'); g.fillStyle = grd; g.fillRect(0, 0, 128, 128); }
+    const starC = document.createElement('canvas'); starC.width = starC.height = 256;
+    { const g = starC.getContext('2d'); g.translate(128, 128);
+      let grd = g.createRadialGradient(0, 0, 0, 0, 0, 56); grd.addColorStop(0, 'rgba(255,238,200,1)'); grd.addColorStop(0.4, 'rgba(255,196,118,0.55)'); grd.addColorStop(1, 'rgba(255,160,70,0)'); g.fillStyle = grd; g.beginPath(); g.arc(0, 0, 56, 0, 7); g.fill();
+      g.globalCompositeOperation = 'lighter';
+      for (let k = 0; k < 6; k++) { g.save(); g.rotate(k * Math.PI / 3); const sg = g.createLinearGradient(0, 0, 0, -126); sg.addColorStop(0, 'rgba(255,224,170,0.85)'); sg.addColorStop(1, 'rgba(255,180,90,0)'); g.fillStyle = sg; g.beginPath(); g.moveTo(-5, 0); g.lineTo(0, -126); g.lineTo(5, 0); g.closePath(); g.fill(); g.restore(); }   // godray spikes
+    }
+    const mkSun = (cv, sc) => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false })); s.scale.set(sc, sc, 1); scene.add(s); return s; };
+    const sunHalo = mkSun(haloC, 300), sunStar = mkSun(starC, 200);   // smaller than before (was 460)
     let sunRise = 0;   // time-eased rise progress (so the sun keeps arcing up while you sit at the ending, not just on scroll)
 
     /* post */
@@ -628,7 +634,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
           const speed = 0.09 + ((row * 7) % 11) * 0.012;                                    // each row sweeps at its OWN speed
           const band = -56 + ((t * speed + row * 0.17) % 1 + 1) % 1 * 112;
           const dx = live[k3] - band, pulse = Math.exp(-dx * dx / 130) * sweepAmt;
-          const baseR = lerp(0.13, 0.045, hexDark), baseG = lerp(0.54, 0.20, hexDark), baseB = lerp(0.31, 0.11, hexDark);   // bright green CUBE (daemon) -> dark green hexagon (attach+), like the neurotype base
+          const baseR = lerp(0.13, 0.11, hexDark), baseG = lerp(0.54, 0.46, hexDark), baseB = lerp(0.31, 0.27, hexDark);   // stay BRIGHT green through the partner stage (honeycomb cells read clearly), barely dims
           let gr = baseR + (0.78 - baseR) * pulse, gg = baseG + (0.26 - baseG) * pulse, gb = baseB + (1.0 - baseB) * pulse;   // node sweeps to bright purple (pops hard against the dark hexagon)
           if (nz > 0.005 && neuroMask[i]) { gr = lerp(gr, 1.25, nz); gg = lerp(gg, 1.0, nz); gb = lerp(gb, 0.32, nz); }   // neurotype: the lit lobes glow YELLOW over the still-running purple sweep
           cCol[k3] = gr; cCol[k3 + 1] = gg; cCol[k3 + 2] = gb; }   // full strength (cmat is held white across the sweep) — no fade-to-white that would brighten mid-handoff
@@ -679,7 +685,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
         }
         leydi.g.attributes.position.needsUpdate = true;
         leydi.m.color.copy(cPink).lerp(cCold, decay);                  // pink -> cold as it decays
-        leydi.m.opacity = toIn * 0.9 * (1 - smoothstep(P + 0.1, P + 0.6, bf)) * (1 - 0.85 * nz);   // fade the heart away during neurotype so the honeycomb is the focus
+        leydi.m.opacity = toIn * 1.15 * (1 - smoothstep(P + 0.1, P + 0.6, bf)) * (1 - 0.85 * nz);   // brighter heart at the partner stage; still fades away during neurotype so the honeycomb is the focus
         if (decay > 0.55 && !leydiFrozen) { leydi.m.map = texSnow; leydi.m.needsUpdate = true; leydiFrozen = true; }
         if (decay < 0.4 && leydiFrozen) { leydi.m.map = texHeart; leydi.m.needsUpdate = true; leydiFrozen = false; }
       }
@@ -783,9 +789,11 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       backdrop.m.opacity = restTone * 0.42;   // faint, behind the orbital
 
       // bloom + glitch (no camera shake)
-      bloom.strength = light ? 0.04 : Math.max(0.12, 0.6 - 0.36 * bootTone - 0.22 * nz - 0.26 * Math.max(0, hexDark - nz) + 0.18 * smoothstep(Re - 0.4, Re, bf) - 0.4 * pp);   // softer bloom at restart + less at boot/panic; dark-hexagon beats (attach+) get the SAME bloom cut as neurotype so the green matches (was: full bloom made the same green look brighter)
+      bloom.strength = light ? 0.04 : Math.max(0.12, 0.6 - 0.36 * bootTone - 0.22 * nz - 0.1 * Math.max(0, hexDark - nz) + 0.18 * smoothstep(Re - 0.4, Re, bf) - 0.4 * pp);   // keep the partner-stage hexagon bright (only a small bloom trim); strong cut stays for boot/neuro/panic/restart
       rgb.uniforms.amount.value = pp * (0.006 + vel * 0.006);   // stronger glitch at panic
-      { sunRise += ((restTone > 0.4 ? 1 : 0) - sunRise) * 0.012; const ang = lerp(-0.95, 0.66, sunRise); sun.position.x = 12 + Math.cos(ang) * 100; sun.position.y = -22 + Math.sin(ang) * 100; sun.material.opacity = smoothstep(Re - 0.6, Re, bf) * (0.46 + 0.05 * Math.sin(t * 0.6)); }   // the sun ARCS up on an orbit over time (low-right -> top-right), visibly rising while you're at the ending
+      { sunRise += ((restTone > 0.4 ? 1 : 0) - sunRise) * 0.012; const ang = lerp(-0.95, 0.66, sunRise), px = 12 + Math.cos(ang) * 100, py = -22 + Math.sin(ang) * 100, op = smoothstep(Re - 0.6, Re, bf), pulse = 1 + 0.06 * Math.sin(t * 0.6);
+        sunHalo.position.set(px, py, -130); sunStar.position.set(px, py, -128);
+        sunHalo.material.opacity = op * 0.34 * pulse; sunStar.material.opacity = op * 0.5 * pulse; sunStar.material.rotation += 0.0011; }   // the sun ARCS up on an orbit over time; small godray star slowly turns
 
       // uptime
       if (upEl) { const now = new Date(); let y = now.getFullYear() - 1980; const an = new Date(now.getFullYear(), 1, 18); if (now < an) y--; const base = new Date(now.getFullYear() - (now < an ? 1 : 0), 1, 18); const ms = now - base, dd = Math.floor(ms / 86400000), r = ms - dd * 86400000, hh = Math.floor(r / 3600000), mm = Math.floor(r % 3600000 / 60000), ss = Math.floor(r % 60000 / 1000); upEl.textContent = `uptime ${y}y ${dd}d ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`; }
