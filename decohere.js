@@ -293,8 +293,12 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       [[0, 0], [1, 0], [1, 1], [2, 1]],   // Z
     ];
     const NTB = TET_SHAPES.length, CELL = 4.4, PURPLE_BLOCK = 3;
-    const tBlock = new Uint8Array(N), tetLocal = new Float32Array(N * 3), blockAnchor = new Float32Array(NTB * 3);
-    for (let b = 0; b < NTB; b++) { blockAnchor[b * 3] = -52 + b * (104 / (NTB - 1)); blockAnchor[b * 3 + 1] = -4 + ((b % 2) ? 13 : -11); blockAnchor[b * 3 + 2] = (b - NTB / 2) * 4; }   // blocks hover spread across the street, staggered height
+    const tBlock = new Uint8Array(N), tetLocal = new Float32Array(N * 3), blockAnchor = new Float32Array(NTB * 3), blockSlot = new Float32Array(NTB * 3);
+    const TET_SLOT = [[-1, 1], [0, 1], [1, 1], [-1, 0], [0, 0], [1, 0], [0, -1]], TET_SP = 16;   // 7 slots packed into a ~square tetris board
+    for (let b = 0; b < NTB; b++) {
+      blockAnchor[b * 3] = -52 + b * (104 / (NTB - 1)); blockAnchor[b * 3 + 1] = -4 + ((b % 2) ? 13 : -11); blockAnchor[b * 3 + 2] = (b - NTB / 2) * 4;   // blocks hover spread across the street, staggered height
+      blockSlot[b * 3] = TET_SLOT[b][0] * TET_SP; blockSlot[b * 3 + 1] = TET_SLOT[b][1] * TET_SP; blockSlot[b * 3 + 2] = rand(-2, 2);   // then pack into the board (flat-ish square), still distinct blocks
+    }
     for (let i = 0; i < N; i++) {
       const b = Math.min(NTB - 1, (i / N * NTB) | 0); tBlock[i] = b;
       const shape = TET_SHAPES[b], cell = shape[(Math.random() * shape.length) | 0];
@@ -534,12 +538,14 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       for (let i = 0; i < N; i++) {
         const k = i * 3;
         let x, y, z;
-        if (cdStagger) {   // street -> tetromino block -> cube (2 staged moves)
+        if (cdStagger) {   // street -> tetromino block -> pack into the square board -> diffuse into the cube
           const b = tBlock[i];
-          const p1 = smoothstep(0.02 + b * 0.025, 0.42 + b * 0.025, f);   // gather into the block (slight per-block stagger)
-          const p2 = smoothstep(0.52, 1.0, f);                            // blocks slide together into the cube
-          const bx = blockAnchor[b * 3] + tetLocal[k], by = blockAnchor[b * 3 + 1] + tetLocal[k + 1], bz = blockAnchor[b * 3 + 2] + tetLocal[k + 2];
-          x = lerp(lerp(t0[k], bx, p1), t1[k], p2); y = lerp(lerp(t0[k + 1], by, p1), t1[k + 1], p2); z = lerp(lerp(t0[k + 2], bz, p1), t1[k + 2], p2);
+          const p1 = smoothstep(0.02 + b * 0.02, 0.30 + b * 0.02, f);   // gather street into the block (slight per-block stagger)
+          const p2 = smoothstep(0.34, 0.6, f);                         // pack: each block slides RIGIDLY into its slot -> a tetris square of distinct blocks
+          const p3 = smoothstep(0.7, 1.0, f);                          // diffuse: the tiled square dissolves into the solid cube
+          const ax = blockAnchor[b * 3] + tetLocal[k], ay = blockAnchor[b * 3 + 1] + tetLocal[k + 1], az = blockAnchor[b * 3 + 2] + tetLocal[k + 2];
+          const sx = blockSlot[b * 3] + tetLocal[k], sy = blockSlot[b * 3 + 1] + tetLocal[k + 1], sz = blockSlot[b * 3 + 2] + tetLocal[k + 2];
+          x = lerp(lerp(lerp(t0[k], ax, p1), sx, p2), t1[k], p3); y = lerp(lerp(lerp(t0[k + 1], ay, p1), sy, p2), t1[k + 1], p3); z = lerp(lerp(lerp(t0[k + 2], az, p1), sz, p2), t1[k + 2], p3);
         } else {
           const e = sxHold ? sxEase : ease;
           x = lerp(t0[k], t1[k], e); y = lerp(t0[k + 1], t1[k + 1], e); z = lerp(t0[k + 2], t1[k + 2], e);
@@ -612,7 +618,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
         for (let i = 0; i < N; i++) { const k3 = i * 3, pz = neuroMask[i]; const tr = pz ? 1.25 : 0.05, tg = pz ? 1.0 : 0.2, tb = pz ? 0.32 : 0.1; cCol[k3] = 1 + (tr - 1) * nz; cCol[k3 + 1] = 1 + (tg - 1) * nz; cCol[k3 + 2] = 1 + (tb - 1) * nz; }   // lobes = bright YELLOW (overdriven), rest = very dim green (does not light up)
         cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
       } else if (cdStagger) {
-        const asm = smoothstep(0.06, 0.5, f) * (1 - smoothstep(0.82, 1.0, f));   // the anomaly block glows purple while the blocks exist, fades as the cube solidifies
+        const asm = smoothstep(0.06, 0.36, f) * (1 - smoothstep(0.72, 0.95, f));   // the anomaly block glows purple through the gather + packed square, fades as it diffuses into the cube
         for (let i = 0; i < N; i++) { const k3 = i * 3;
           if (tBlock[i] === PURPLE_BLOCK) { cCol[k3] = 1; cCol[k3 + 1] = lerp(1, 0.45, asm); cCol[k3 + 2] = lerp(1, 2.2, asm); }   // grey/orange tint * this = violet
           else { cCol[k3] = 1; cCol[k3 + 1] = 1; cCol[k3 + 2] = 1; }
@@ -678,11 +684,13 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
           for (let i = 0; i < NF; i++) {
             const fx = forbidPos[i * 3] * sc, fy = forbidPos[i * 3 + 1] * sc, fz = forbidPos[i * 3 + 2] * sc + 16;
             const cx = (hash[i] - 0.5) * 150, cy = 26 + (hash2[i] - 0.5) * 24, cz = (hash2[i] - 0.5) * 50;   // cloud target above the landscape
-            const rate = 0.5 + hash2[i] * 1.7;                                     // each drop falls at its OWN speed
-            const drop = clamp01((fallPhase - hash[i] * 0.4) * rate);              // staggered start + varied rate -> real rain, not a flat falling sheet
-            const groundY = -46 + (hash[i] - 0.5) * 12, driftX = (hash2[i] - 0.5) * 16 * drop;
-            forbid.pos[i * 3] = lerp(fx, cx, cloud) + driftX + Math.sin(t * 0.6 + i) * 0.6;
-            forbid.pos[i * 3 + 1] = lerp(lerp(fy, cy, cloud), groundY, drop) + Math.cos(t * 0.5 + i) * 0.6;
+            const started = clamp01((fallPhase - hash[i] * 0.5) * 2.2);           // per-drop staggered START of the fall (scroll-driven)
+            const spd = 0.17 + hash2[i] * 0.6;                                    // each drop's OWN fall speed
+            const cyc = ((t * spd + hash[i] * 9.17) % 1 + 1) % 1;                 // continuous TIME-based sawtooth: the drop falls, wraps at the ground, repeats — real individual drops, not a scroll-locked sheet
+            const yTop = 30 + (hash2[i] - 0.5) * 24, yBot = -46 + (hash[i] - 0.5) * 12, driftX = (hash2[i] - 0.5) * 16 * started;
+            const rainY = lerp(yTop, yBot, cyc);
+            forbid.pos[i * 3] = lerp(lerp(fx, cx, cloud), cx + driftX + Math.sin(t * 0.6 + i) * 0.6, started);
+            forbid.pos[i * 3 + 1] = lerp(lerp(fy, cy, cloud), rainY + Math.cos(t * 0.5 + i) * 0.3, started);
             forbid.pos[i * 3 + 2] = lerp(fz, cz, cloud);
           }
           forbid.g.attributes.position.needsUpdate = true;
@@ -759,7 +767,8 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
         monLast = t;
         let mem = 16 + (bf >= A - 0.2 ? 16 : 0) + (bf >= Sm - 0.2 ? 22 : 0) + (bf >= Bo - 0.2 ? 22 : 0) - (bf >= P - 0.1 ? 20 : 0) + 5 * Math.sin(t * 0.7) + smoothstep(0, nBeats - 1, bf) * 6;
         const bootLoad = smoothstep(idx.boot - 0.6, idx.boot, bf) * (1 - smoothstep(idx.boot + 0.2, idx.boot + 0.9, bf));
-        let load = 13 + vel * 38 + pp * 72 + Math.max(0, 1 - Math.abs(bf - idx.core_dump) / 0.8) * 36 + bootLoad * 30 + 5 * Math.sin(t * 2.3 + bf * 2);
+        const hardship = smoothstep(idx.syntax_error - 0.6, idx.syntax_error - 0.1, bf) * (1 - smoothstep(idx.core_dump + 0.5, idx.core_dump + 1.0, bf));   // welfare (01) -> homeless (02): sustained heavy load across the whole hardship stretch
+        let load = 13 + vel * 32 + pp * 72 + hardship * 52 + Math.max(0, 1 - Math.abs(bf - idx.core_dump) / 0.55) * 18 + bootLoad * 30 + 5 * Math.sin(t * 2.3 + bf * 2);
         load *= (1 - 0.55 * restTone);   // restart = calm
         for (let i = 0; i < MONN - 1; i++) { cpuH[i] = cpuH[i + 1]; memH[i] = memH[i + 1]; }
         cpuH[MONN - 1] = clampN(load, 2, 99); memH[MONN - 1] = clampN(mem, 3, 98);
