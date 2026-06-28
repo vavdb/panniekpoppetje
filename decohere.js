@@ -214,7 +214,7 @@ function makeTargets(N, ids) {
 }
 
 const VINCENT_TINT = { boot: 0xe67e22, syntax_error: 0x9a9aa2, core_dump: 0x9a9aa2, bootstrap: 0xe67e22, daemon: 0x35e06a, attach: 0x0d331a, spawn_smurf: 0x0d331a, spawn_boefje: 0x0d331a, neurotype_export: 0x0d331a, kernel_panic: 0xff3b3b, restart: 0xe67e22 };   // hexagon beats = dark green base (like neurotype); daemon CUBE stays bright
-const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, bootstrap: 0x0a0708, daemon: 0x08090c, attach: 0x0a080e, spawn_smurf: 0x0b0809, spawn_boefje: 0x0a0a0c, neurotype_export: 0x0d0a0e, kernel_panic: 0x020203, restart: 0x0b1a33 };
+const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, bootstrap: 0x0a0708, daemon: 0x08090c, attach: 0x0a080e, spawn_smurf: 0x0b0809, spawn_boefje: 0x0a0a0c, neurotype_export: 0x0d0a0e, kernel_panic: 0x020203, restart: 0x140d06 };   // restart = warm dawn dark (sunrise glow added on top)
 
 (async function main() {
   try {
@@ -322,7 +322,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
     for (let i = 0; i < N; i++) {
       if (i < REST_HEX) {
         const s = Math.min(N - 1, Math.floor(i / REST_HEX * N)) * 3, k = i * 3;
-        targets.restart[k] = -74 + targets.boot[s] * 1.2; targets.restart[k + 1] = targets.boot[s + 1] * 1.5; targets.restart[k + 2] = targets.boot[s + 2] * 1.2;   // less stretch + more particles = denser, more defined like the boot orbital
+        targets.restart[k] = -74 + targets.boot[s]; targets.restart[k + 1] = targets.boot[s + 1]; targets.restart[k + 2] = targets.boot[s + 2];   // exact boot orbital shape (no stretch) -> as tight + defined as the boot sequence
         const ry = targets.restart[k + 1];
         let nb = Math.exp(-Math.pow((Math.abs(ry) - 16) / 9, 2)) * 0.7;   // purple emphasis at the heartbeat heights (~+-16)
         nb *= clamp01(1 - bootCol[s + 1] * 1.3);   // ...but ONLY on the already-dim regions, so the bright yellow lobes run uncut to the middle
@@ -377,7 +377,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       spawn_boefje: "fork() -> child 'boefje' · pid blue · firewall extended",
       neurotype_export: 'deobfuscate: neurotype decoded · softie.core = true',
       kernel_panic: 'kernel_panic: shared memory violation · repair_loop -> overflow',
-      restart: 'main(resilience:true): SIGKILL partner · resynced with children',
+      restart: 'main(resilience:true): online · resynced with children · exit 0 ♥',
     };
     const logLines = ids.map((id) => { const d = document.createElement('div'); d.className = 'logline'; d.textContent = LOG[id] || ''; compileEl.appendChild(d); return d; });   // one persistent line per beat — the whole process log, always visible
     const SIM_MO = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
@@ -453,6 +453,12 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
         famOff[i] = Math.pow(Math.random(), 1.6) * 0.5; }
       famReady = true;
     } catch (e) { console.warn('family drawing skipped:', e.message); }
+
+    // warm SUNRISE glow behind the final (restart) scene — the ending lifts into a dawn
+    const sunC = document.createElement('canvas'); sunC.width = sunC.height = 128;
+    { const g = sunC.getContext('2d'), grd = g.createRadialGradient(64, 64, 0, 64, 64, 64); grd.addColorStop(0, 'rgba(255,228,176,1)'); grd.addColorStop(0.4, 'rgba(255,184,96,0.5)'); grd.addColorStop(1, 'rgba(255,150,60,0)'); g.fillStyle = grd; g.fillRect(0, 0, 128, 128); }
+    const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(sunC), color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+    sun.scale.set(460, 460, 1); sun.position.set(-46, -52, -130); scene.add(sun);   // low + behind the 'pure me' orbital, like a sun on the horizon
 
     /* post */
     const composer = new EffectComposer(renderer);
@@ -552,13 +558,13 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
         }
         if (restartFlow > 0) {
           if (i / N >= 0.66) {   // two small fuzzy helixes, one per heartbeat: each springs from a yellow lobe and wraps its child
-            const top = (i % 2 === 0) ? 1 : -1, dir = top > 0 ? -1 : 1, v = (((i / N) - 0.66) / 0.34 + t * 0.018) % 1, ang = v * Math.PI * 14 * dir;
-            const radBase = smoothstep(0, 0.04, v) * (11 + 12 * v), rad = radBase + Math.sin(t * 0.5 + i * 0.3) * 3 * hash[i];   // wider first loop, grows toward the end
+            const top = (i % 2 === 0) ? 1 : -1, dir = top > 0 ? -1 : 1, v = (((i / N) - 0.66) / 0.34 + t * 0.01) % 1, ang = v * Math.PI * 14 * dir;
+            const radBase = smoothstep(0, 0.04, v) * (11 + 12 * v), rad = radBase + Math.sin(t * 0.35 + i * 0.3) * 1.6 * hash[i];   // wider first loop, grows toward the end; gentler shimmer
             const gap = lerp(3, -16, smoothstep(0.96, 1.0, v));   // just-not-touching; cross only at the very end past the heartbeats
             const ay = top * lerp(24, radBase + gap, smoothstep(0.05, 0.4, v));
-            x = lerp(x, -74 + v * 156 + Math.sin(t * 0.4 + i) * 3, restartFlow); y = lerp(y, ay + Math.sin(ang) * rad, restartFlow); z = lerp(z, Math.cos(ang) * rad, restartFlow);
-          } else {   // the hydrogen orbital is ALIVE: slow swirl around its vertical axis (height-twisted) + a soft rippling breathe
-            const cx = -74, dx = x - cx, a = t * 0.32 + y * 0.016, ca = Math.cos(a), sa = Math.sin(a), br = 1 + 0.08 * Math.sin(t * 0.7 + i * 0.012) * restartFlow;
+            x = lerp(x, -74 + v * 156 + Math.sin(t * 0.25 + i) * 1.6, restartFlow); y = lerp(y, ay + Math.sin(ang) * rad, restartFlow); z = lerp(z, Math.cos(ang) * rad, restartFlow);
+          } else {   // the hydrogen orbital is ALIVE but CALM: gentle slow swirl + a soft shallow breathe (settled, not frantic)
+            const cx = -74, dx = x - cx, a = t * 0.13 + y * 0.012, ca = Math.cos(a), sa = Math.sin(a), br = 1 + 0.035 * Math.sin(t * 0.5 + i * 0.012) * restartFlow;
             const rx = dx * ca - z * sa, rz = dx * sa + z * ca;   // steady swirl; fade the DISPLACEMENT (not the angle) by restartFlow so scrolling in can't sweep through many turns
             x = cx + lerp(dx, rx, restartFlow) * br; z = lerp(z, rz, restartFlow) * br; y = y * br;
           }
@@ -765,6 +771,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       // bloom + glitch (no camera shake)
       bloom.strength = light ? 0.04 : Math.max(0.12, 0.6 - 0.36 * bootTone - 0.22 * nz - 0.26 * Math.max(0, hexDark - nz) + 0.18 * smoothstep(Re - 0.4, Re, bf) - 0.4 * pp);   // softer bloom at restart + less at boot/panic; dark-hexagon beats (attach+) get the SAME bloom cut as neurotype so the green matches (was: full bloom made the same green look brighter)
       rgb.uniforms.amount.value = pp * (0.006 + vel * 0.006);   // stronger glitch at panic
+      { const dawn = smoothstep(Re - 0.55, Re, bf); sun.material.opacity = dawn * (0.46 + 0.05 * Math.sin(t * 0.6)); sun.position.y = -64 + dawn * 14; }   // sunrise glow swells + gently rises at the very end (kept low so the orbital stays defined)
 
       // uptime
       if (upEl) { const now = new Date(); let y = now.getFullYear() - 1980; const an = new Date(now.getFullYear(), 1, 18); if (now < an) y--; const base = new Date(now.getFullYear() - (now < an ? 1 : 0), 1, 18); const ms = now - base, dd = Math.floor(ms / 86400000), r = ms - dd * 86400000, hh = Math.floor(r / 3600000), mm = Math.floor(r % 3600000 / 60000), ss = Math.floor(r % 60000 / 1000); upEl.textContent = `uptime ${y}y ${dd}d ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`; }
@@ -777,7 +784,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
         const bootLoad = smoothstep(idx.boot - 0.6, idx.boot, bf) * (1 - smoothstep(idx.boot + 0.2, idx.boot + 0.9, bf));
         const hardship = smoothstep(idx.syntax_error - 0.6, idx.syntax_error - 0.1, bf) * (1 - smoothstep(idx.core_dump + 0.5, idx.core_dump + 1.0, bf));   // welfare (01) -> homeless (02): sustained heavy load across the whole hardship stretch
         let load = 13 + vel * 32 + pp * 72 + hardship * 52 + Math.max(0, 1 - Math.abs(bf - idx.core_dump) / 0.55) * 18 + bootLoad * 30 + 5 * Math.sin(t * 2.3 + bf * 2);
-        load *= (1 - 0.55 * restTone);   // restart = calm
+        load *= (1 - 0.82 * restTone);   // restart = calm / idle (recovered, nominal)
         for (let i = 0; i < MONN - 1; i++) { cpuH[i] = cpuH[i + 1]; memH[i] = memH[i + 1]; }
         cpuH[MONN - 1] = clampN(load, 2, 99); memH[MONN - 1] = clampN(mem, 3, 98);
         drawMon();
