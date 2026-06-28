@@ -712,7 +712,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
         const sx = idx.syntax_error;
         const appear = smoothstep(sx - 0.05, sx + 0.12, bf);                       // grows over the held house
         const cloud = smoothstep(sx + 0.16, sx + 0.5, bf);                         // drifts up into a purple CLOUD above the street
-        const fallPhase = smoothstep(sx + 0.5, sx + 1.05, bf);                     // then RAINS down onto the street (not a fade)
+        const fallPhase = smoothstep(sx + 0.82, sx + 1.3, bf);                     // RAINS down only AFTER the house->street scene has nearly finished (purple cloud holds above it first)
         if (appear > 0.001) {
           const sc = 0.55 + 0.45 * appear;
           for (let i = 0; i < NF; i++) {
