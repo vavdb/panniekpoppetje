@@ -41,12 +41,14 @@ function parseMD(txt) {
   return { beats, footer };
 }
 let uptimeEl = null;
+// escape, then add <wbr> break opportunities after . : _ ( so long sigs wrap at logical points (not mid-word) on narrow screens
+const wbrify = (s) => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])).replace(/([.:_(])/g, '$1<wbr>');
 function buildDOM({ beats, footer }) {
   const root = document.getElementById('beats');
   beats.forEach((b) => {
     const sec = document.createElement('section'); sec.className = 'beat'; sec.id = 'beat-' + b.id;
     const tag = document.createElement('div'); tag.className = 'tag'; tag.textContent = b.tag; sec.appendChild(tag);
-    const sig = document.createElement('h2'); sig.className = 'sig'; sig.textContent = b.sig; sec.appendChild(sig);
+    const sig = document.createElement('h2'); sig.className = 'sig'; sig.innerHTML = wbrify(b.sig); sec.appendChild(sig);
     const doc = document.createElement('div'); doc.className = 'doc';
     b.doc.forEach(l => {
       const d = document.createElement('div'); d.className = 'line';

@@ -120,6 +120,13 @@
   #compile .logline.on{opacity:.95}
   body.lum-light #compile .logline{color:#1e7a52}
 
+  /* phone: smaller sig + tighter padding so long signatures wrap cleanly (with the <wbr> break points) */
+  @media (max-width:768px){
+    .beat{padding:12vh 6vw}
+    .beat .sig{font-size:clamp(1.5rem,6.6vw,2.4rem); line-height:1.1}
+    .beat .doc{font-size:.82rem}
+  }
+
   #err{position:fixed;inset:0;display:none;place-items:center;z-index:9;background:#070708;
     color:var(--error);font-family:"JetBrains Mono",monospace;padding:2rem;text-align:center}
 </style>
