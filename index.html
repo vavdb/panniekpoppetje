@@ -107,6 +107,10 @@
   #simtime{font-size:.64rem; color:var(--fg-muted); opacity:.72; margin-top:.32rem}
   body.lum-light #uptime{color:#1e7a52}
 
+  /* faux system monitor (btop-style), top-left */
+  #mon{position:fixed; top:2.0vh; left:2.6vw; z-index:3; width:154px; height:64px; opacity:.82; pointer-events:none}
+  body.lum-light #mon{opacity:.72}
+
   /* compile-log (core_dump -> bootstrap rebuild) */
   #compile{
     position:fixed; left:2.6vw; bottom:3vh; z-index:3;
@@ -127,6 +131,7 @@
     <div id="uptime"></div>
     <div id="simtime"></div>
   </div>
+  <canvas id="mon" width="308" height="128"></canvas>
   <div id="scrollhint">scroll ↓ to collapse</div>
   <div id="compile"></div>
   <div id="err"></div>

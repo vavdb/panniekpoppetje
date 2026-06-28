@@ -2,6 +2,13 @@
 
 Status van de scroll-storytelling site. Engine = `decohere.js` (Three.js `Points`, geen particle-lib), copy = `content/decohere.md`, shell/CSS = `index.html`. Serve over http (`python -m http.server`), test met `?v=N` om CSS-cache te omzeilen.
 
+## Sessie 2 — toegevoegd (browser-geverifieerd)
+- **btop-monitor** (`#mon` canvas, links-boven): faux `load`+`mem` sparklines. **Story-driven**: `mem` vult bij elk proces (partner @attach, 2 kids @smurf/boefje), valt bij `kernel_panic` (partner gekilld); `load` piekt bij stress (boot-infall, homeless straat, panic, scroll-velocity), kalm bij restart. Tune in `decohere.js` `drawMon()` + de monitor-update in `frame()`.
+- **Tetris-rebuild** (`core_dump` → `bootstrap`): straat → 7 zwevende **tetromino-blokken** (1 = `PURPLE_BLOCK` anomalie) → kubus. Per-deeltje `tBlock`/`tetLocal`/`blockAnchor` (precompute na `cdOff`), 2-staps morph in de loop (`p1` gather, `p2` converge), paarse kleur-branch (`cdStagger`) in de cCol-sectie. Kubus-eindstand = onveranderde `targets.bootstrap` (zodat bootstrap→daemon correlatie intact blijft).
+- **Persistente console** (`#compile`, links-onder): 1 stdout-regel per beat (`LOG` map) met knipperende cursor, getypt op `cen`; bootstrap toont nog steeds de volle `COMPILE` build-log. Regels staan nu hardcoded in `decohere.js` (`LOG`) — evt. naar `::log` in de md verplaatsen.
+- **Dual klokken** (`#hud`): wall-time `uptime` + scroll-`sim-time` (zie eerdere sessie).
+- Polish deze sessie: heart edge-only pulse + inside wobble; heart-decay start NA neurotype (`P-0.7`); donkere hexagon vanaf `attach` + bloom-cut matcht neurotype; groen→paars sweep loopt nu DOOR neurotype onder de gele lobes; flash bij neuro-entry weg (sweep cCol full-strength, cmat white near-binary); gezin onderaan + partner fade-in-place (`famGone` via nearest-`-3`); tekst-leesbaarheid (lichter `--muted` + sterke halo). Voorste-pop van de sweep is op verzoek verwijderd.
+
 ## Nog te doen (deferred)
 
 > **Alle deferred items hieronder = ✅ AFGEROND deze sessie** (browser-geverifieerd, geen console-errors, niets gecommit). Detail per item hieronder. Daarnaast deze sessie gefixt:

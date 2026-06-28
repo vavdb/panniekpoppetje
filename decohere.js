@@ -282,6 +282,26 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
     const cdOff = new Float32Array(N);
     { const bs = targets.bootstrap; for (let i = 0; i < N; i++) { const d = Math.hypot(bs[i * 3], bs[i * 3 + 1], bs[i * 3 + 2]); cdOff[i] = (0.6 * clamp01(d / 42) + 0.4 * Math.random()) * 0.58; } }
     const CDW = 0.4;   // per-particle conversion window
+    // tetromino rebuild: the street first gathers into 7 floating TETROMINO blocks, which then slide together into the cube (core_dump -> bootstrap). One block is the purple anomaly.
+    const TET_SHAPES = [
+      [[0, 0], [1, 0], [2, 0], [3, 0]],   // I
+      [[0, 0], [1, 0], [0, 1], [1, 1]],   // O
+      [[0, 0], [1, 0], [2, 0], [1, 1]],   // T
+      [[0, 0], [0, 1], [0, 2], [1, 2]],   // L
+      [[1, 0], [1, 1], [1, 2], [0, 2]],   // J
+      [[1, 0], [2, 0], [0, 1], [1, 1]],   // S
+      [[0, 0], [1, 0], [1, 1], [2, 1]],   // Z
+    ];
+    const NTB = TET_SHAPES.length, CELL = 4.4, PURPLE_BLOCK = 3;
+    const tBlock = new Uint8Array(N), tetLocal = new Float32Array(N * 3), blockAnchor = new Float32Array(NTB * 3);
+    for (let b = 0; b < NTB; b++) { blockAnchor[b * 3] = -52 + b * (104 / (NTB - 1)); blockAnchor[b * 3 + 1] = -4 + ((b % 2) ? 13 : -11); blockAnchor[b * 3 + 2] = (b - NTB / 2) * 4; }   // blocks hover spread across the street, staggered height
+    for (let i = 0; i < N; i++) {
+      const b = Math.min(NTB - 1, (i / N * NTB) | 0); tBlock[i] = b;
+      const shape = TET_SHAPES[b], cell = shape[(Math.random() * shape.length) | 0];
+      tetLocal[i * 3] = (cell[0] - 1.5) * CELL + rand(-CELL * 0.42, CELL * 0.42);
+      tetLocal[i * 3 + 1] = (cell[1] - 1.0) * CELL + rand(-CELL * 0.42, CELL * 0.42);
+      tetLocal[i * 3 + 2] = rand(-CELL * 0.5, CELL * 0.5);
+    }
     // boot orbital colour map like the hydrogen density plot: orange/yellow in the dense lobe cores -> purple at the thin fringes
     const WHITE = new THREE.Color(1, 1, 1);
     const bootCol = new Float32Array(N * 3);
@@ -341,7 +361,40 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
     const simEl = document.getElementById('simtime');
     const COMPILE = ['$ make decohere --clean --no-cache', '[ 0%] gathering /dev/street …', '[18%] cc self.core.c', '[39%] cc trauma.o (warnings: 47)', '[61%] ld resilience.a', '[78%] strip debug symbols', '[92%] WARN: no toolchain — shipping untested', '[100%] build OK -> ./decohere'];
     const compileEl = document.getElementById('compile');
+    // persistent console: one stdout line per beat (bootstrap shows the full build log instead)
+    const LOG = {
+      start: 'decohere: awaiting measurement …',
+      boot: 'decohere: collapse |ψ⟩ -> state · output_buffer: direct',
+      syntax_error: 'parser: grammar not found · input flagged "difficult"',
+      core_dump: 'SIGSEGV: home not found · core dumped to /dev/street',
+      bootstrap: 'make: rebuilding from source · no toolchain',
+      daemon: 'daemon[1]: running · carries household · since boot',
+      attach: 'net: partner bound on shared interface · firewall extended',
+      spawn_smurf: "fork() -> child 'smurf' · pid red · firewall extended",
+      spawn_boefje: "fork() -> child 'boefje' · pid blue · firewall extended",
+      neurotype_export: 'deobfuscate: neurotype decoded · softie.core = true',
+      kernel_panic: 'kernel_panic: shared memory violation · repair_loop -> overflow',
+      restart: 'main(resilience:true): SIGKILL partner · resynced with children',
+    };
     const SIM_MO = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+    // faux system monitor (btop-style), top-left. Values are STORY-driven: mem fills as processes (partner + kids) load, load spikes at stress beats.
+    const mon = document.getElementById('mon'), mctx = mon && mon.getContext('2d');
+    const MONN = 56, cpuH = new Float32Array(MONN).fill(12), memH = new Float32Array(MONN).fill(16); let monLast = -1;
+    const clampN = (v, a, b) => Math.min(b, Math.max(a, v));
+    const loadColor = (v) => v < 0.5 ? `rgb(${Math.round(84 + v * 2 * 150)},${Math.round(240 - v * 2 * 70)},${Math.round(166 - v * 2 * 120)})` : `rgb(255,${Math.round(180 - (v - 0.5) * 2 * 90)},${Math.round(46 + (v - 0.5) * 2 * 76)})`;   // green -> amber -> red
+    const memColor = (v) => `rgb(${Math.round(96 + v * 70)},${Math.round(120 - v * 50)},${Math.round(210 + v * 45)})`;   // cyan-ish -> deep purple
+    function drawMon() {
+      const W = mon.width, H = mon.height, lblH = 20, gap = 6, gh = (H - lblH * 2 - gap) / 2, bw = W / MONN;
+      mctx.clearRect(0, 0, W, H); mctx.font = '15px "Kode Mono", monospace'; mctx.textBaseline = 'alphabetic';
+      const graph = (hist, top, label, col) => {
+        for (let i = 0; i < MONN; i++) { const v = Math.min(1, hist[i] / 100), bh = Math.max(0.5, v * gh); mctx.fillStyle = col(v); mctx.globalAlpha = 0.35 + 0.65 * (i / MONN); mctx.fillRect(i * bw, top + lblH + gh - bh, bw - 1, bh); }
+        mctx.globalAlpha = 1; const cur = hist[MONN - 1];
+        mctx.fillStyle = 'rgba(232,232,239,.85)'; mctx.fillText(label, 0, top + 14);
+        const s = String(Math.round(cur)).padStart(2, ' ') + '%'; mctx.fillStyle = col(Math.min(1, cur / 100)); mctx.fillText(s, W - mctx.measureText(s).width, top + 14);
+      };
+      graph(cpuH, 0, 'load', loadColor);
+      graph(memH, lblH + gh + gap, 'mem', memColor);
+    }
     const woven = []; const lA = new Float32Array(NL), lR = new Float32Array(NL);
     for (let i = 0; i < NL; i++) { woven.push(inSphere(44)); lA[i] = Math.random() * Math.PI * 2; lR[i] = Math.sqrt(Math.random()); }
     // filled heart silhouette via implicit curve (x^2+y^2-1)^3 - x^2 y^3 < 0
@@ -480,8 +533,17 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       const sxHold = (i0 === idx.syntax_error), sxEase = smoothstep(0.34, 1.0, f);   // hold the complete house briefly (forbidden sits over it) before morphing to the street
       for (let i = 0; i < N; i++) {
         const k = i * 3;
-        const e = cdStagger ? smoothstep(cdOff[i], cdOff[i] + CDW, f) : (sxHold ? sxEase : ease);
-        let x = lerp(t0[k], t1[k], e), y = lerp(t0[k + 1], t1[k + 1], e), z = lerp(t0[k + 2], t1[k + 2], e);
+        let x, y, z;
+        if (cdStagger) {   // street -> tetromino block -> cube (2 staged moves)
+          const b = tBlock[i];
+          const p1 = smoothstep(0.02 + b * 0.025, 0.42 + b * 0.025, f);   // gather into the block (slight per-block stagger)
+          const p2 = smoothstep(0.52, 1.0, f);                            // blocks slide together into the cube
+          const bx = blockAnchor[b * 3] + tetLocal[k], by = blockAnchor[b * 3 + 1] + tetLocal[k + 1], bz = blockAnchor[b * 3 + 2] + tetLocal[k + 2];
+          x = lerp(lerp(t0[k], bx, p1), t1[k], p2); y = lerp(lerp(t0[k + 1], by, p1), t1[k + 1], p2); z = lerp(lerp(t0[k + 2], bz, p1), t1[k + 2], p2);
+        } else {
+          const e = sxHold ? sxEase : ease;
+          x = lerp(t0[k], t1[k], e); y = lerp(t0[k + 1], t1[k + 1], e); z = lerp(t0[k + 2], t1[k + 2], e);
+        }
         if (restartFlow > 0) {
           if (i / N >= 0.66) {   // two small fuzzy helixes, one per heartbeat: each springs from a yellow lobe and wraps its child
             const top = (i % 2 === 0) ? 1 : -1, dir = top > 0 ? -1 : 1, v = (((i / N) - 0.66) / 0.34 + t * 0.018) % 1, ang = v * Math.PI * 14 * dir;
@@ -548,6 +610,13 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
         cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
       } else if (nz > 0.005) {
         for (let i = 0; i < N; i++) { const k3 = i * 3, pz = neuroMask[i]; const tr = pz ? 1.25 : 0.05, tg = pz ? 1.0 : 0.2, tb = pz ? 0.32 : 0.1; cCol[k3] = 1 + (tr - 1) * nz; cCol[k3 + 1] = 1 + (tg - 1) * nz; cCol[k3 + 2] = 1 + (tb - 1) * nz; }   // lobes = bright YELLOW (overdriven), rest = very dim green (does not light up)
+        cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
+      } else if (cdStagger) {
+        const asm = smoothstep(0.06, 0.5, f) * (1 - smoothstep(0.82, 1.0, f));   // the anomaly block glows purple while the blocks exist, fades as the cube solidifies
+        for (let i = 0; i < N; i++) { const k3 = i * 3;
+          if (tBlock[i] === PURPLE_BLOCK) { cCol[k3] = 1; cCol[k3 + 1] = lerp(1, 0.45, asm); cCol[k3 + 2] = lerp(1, 2.2, asm); }   // grey/orange tint * this = violet
+          else { cCol[k3] = 1; cCol[k3 + 1] = 1; cCol[k3 + 2] = 1; }
+        }
         cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
       } else if (neuroDimmed) { cCol.fill(1); cgeo.attributes.color.needsUpdate = true; neuroDimmed = false; }
 
@@ -685,12 +754,31 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       if (upEl) { const now = new Date(); let y = now.getFullYear() - 1980; const an = new Date(now.getFullYear(), 1, 18); if (now < an) y--; const base = new Date(now.getFullYear() - (now < an ? 1 : 0), 1, 18); const ms = now - base, dd = Math.floor(ms / 86400000), r = ms - dd * 86400000, hh = Math.floor(r / 3600000), mm = Math.floor(r % 3600000 / 60000), ss = Math.floor(r % 60000 / 1000); upEl.textContent = `uptime ${y}y ${dd}d ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`; }
       // simulation-time: interpolate the life-timeline by scroll fraction (where this scroll position sits between the two chapters' dates)
       if (simEl) { const simMs = lerp(beatTimes[i0], beatTimes[i1], f), sd = new Date(simMs), ageY = Math.max(0, Math.floor((simMs - birthMs) / 31556952000)); simEl.textContent = `sim-time ${SIM_MO[sd.getUTCMonth()]} ${sd.getUTCFullYear()} · age ${ageY}`; }
-      // compile-log: rebuild-from-wreckage (core_dump 02 -> bootstrap 03), reveal line-by-line then fade out
+      // system monitor: load spikes at stress (boot infall, homeless street, kernel panic, scroll velocity), mem fills as the partner + 2 child processes load (partner freed at the panic)
+      if (mctx && t - monLast > 0.08) {
+        monLast = t;
+        let mem = 16 + (bf >= A - 0.2 ? 16 : 0) + (bf >= Sm - 0.2 ? 22 : 0) + (bf >= Bo - 0.2 ? 22 : 0) - (bf >= P - 0.1 ? 20 : 0) + 5 * Math.sin(t * 0.7) + smoothstep(0, nBeats - 1, bf) * 6;
+        const bootLoad = smoothstep(idx.boot - 0.6, idx.boot, bf) * (1 - smoothstep(idx.boot + 0.2, idx.boot + 0.9, bf));
+        let load = 13 + vel * 38 + pp * 72 + Math.max(0, 1 - Math.abs(bf - idx.core_dump) / 0.8) * 36 + bootLoad * 30 + 5 * Math.sin(t * 2.3 + bf * 2);
+        load *= (1 - 0.55 * restTone);   // restart = calm
+        for (let i = 0; i < MONN - 1; i++) { cpuH[i] = cpuH[i + 1]; memH[i] = memH[i + 1]; }
+        cpuH[MONN - 1] = clampN(load, 2, 99); memH[MONN - 1] = clampN(mem, 3, 98);
+        drawMon();
+      }
+      // console: full rebuild build-log around bootstrap (the showpiece); otherwise one persistent stdout line for the current beat, with a blinking cursor
       if (compileEl) {
-        const bp = smoothstep(Bs - 0.55, Bs + 0.4, bf) * (1 - smoothstep(Bs + 0.5, Bs + 0.9, bf));
-        const shown = Math.floor(smoothstep(Bs - 0.5, Bs + 0.4, bf) * COMPILE.length);
-        compileEl.textContent = COMPILE.slice(0, shown).join('\n');
-        compileEl.style.opacity = bp;
+        const cur = (Math.sin(t * 4) > 0) ? '█' : ' ';
+        const bp = smoothstep(Bs - 0.55, Bs + 0.4, bf) * (1 - smoothstep(Bs + 0.5, Bs + 0.9, bf));   // bootstrap build-log window
+        if (bp > 0.02) {
+          const shown = Math.floor(smoothstep(Bs - 0.5, Bs + 0.4, bf) * COMPILE.length);
+          compileEl.textContent = COMPILE.slice(0, shown).join('\n') + (shown < COMPILE.length ? cur : '');
+          compileEl.style.opacity = Math.max(bp, 0.62);
+        } else {
+          const line = LOG[ids[active]] || '';
+          const rv = Math.min(line.length, Math.floor(smoothstep(0.12, 0.5, cen) * line.length));   // type the line out as the beat settles
+          compileEl.textContent = line.slice(0, rv) + cur;
+          compileEl.style.opacity = 0.6;
+        }
       }
 
       // text: blur active sig by (1-c), measurement pulse on rising c
