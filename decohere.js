@@ -293,16 +293,17 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       [[6, 1], [6, 2], [5, 3], [6, 3]],   // L  (interlocks with the one above)
     ];   // 7 interlocking pieces tile a 7x4 board EXACTLY -> a real filled square (tall cells make it square overall)
     const NTB = BLOCK_CELLS.length, PURPLE_PIECE = 1, CW = 6.6, CH = 13.2;
-    const cellWorld = (c) => [(c[0] - 3) * CW, (c[1] - 1.5) * CH];
-    const tBlock = new Uint8Array(N), tetSquare = new Float32Array(N * 3), Bt = targets.bootstrap;
+    const cellWorld = (col, row) => [(col - 3) * CW, (row - 1.5) * CH];
+    const CELL_PIECE = {}; BLOCK_CELLS.forEach((cells, pi) => cells.forEach(c => CELL_PIECE[c[0] + ',' + c[1]] = pi));   // (col,row) -> piece
+    // square = the bootstrap cube PROJECTED flat onto the 7x4 board: each particle keeps its bootstrap x,y region, so square<->cube is just depth (no scatter) AND bootstrap stays daemon-correlated (03->04 grows into the lattice)
+    const tBlock = new Uint8Array(N), tetSquare = new Float32Array(N * 3), Bp = targets.bootstrap;
     for (let i = 0; i < N; i++) {
-      const b = Math.min(NTB - 1, (i / N * NTB) | 0); tBlock[i] = b;
-      const cells = BLOCK_CELLS[b], c = cells[(Math.random() * cells.length) | 0], w = cellWorld(c);
+      const col = Math.min(6, Math.max(0, ((Bp[i * 3] + 24) / 48 * 7) | 0)), row = Math.min(3, Math.max(0, ((Bp[i * 3 + 1] + 24) / 48 * 4) | 0));
+      tBlock[i] = CELL_PIECE[col + ',' + row];
+      const w = cellWorld(col, row);
       tetSquare[i * 3] = w[0] + rand(-CW * 0.46, CW * 0.46);
       tetSquare[i * 3 + 1] = w[1] + rand(-CH * 0.46, CH * 0.46);
       tetSquare[i * 3 + 2] = rand(-1.5, 1.5);
-      // redefine the bootstrap cube the square INFLATES into: same x,y as the square (so it does NOT scatter), only depth restored
-      Bt[i * 3] = tetSquare[i * 3] + rand(-3, 3); Bt[i * 3 + 1] = tetSquare[i * 3 + 1] + rand(-3, 3); Bt[i * 3 + 2] = rand(-20, 20);
     }
     // boot orbital colour map like the hydrogen density plot: orange/yellow in the dense lobe cores -> purple at the thin fringes
     const WHITE = new THREE.Color(1, 1, 1);
@@ -424,7 +425,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
     }
     // the forbidden rain later becomes the PURPLE anomaly piece of the tetris square — its final cells
     const forbidSquare = new Float32Array(NF * 3);
-    { const cells = BLOCK_CELLS[PURPLE_PIECE]; for (let i = 0; i < NF; i++) { const c = cells[(Math.random() * cells.length) | 0], w = cellWorld(c); forbidSquare[i * 3] = w[0] + rand(-CW * 0.46, CW * 0.46); forbidSquare[i * 3 + 1] = w[1] + rand(-CH * 0.46, CH * 0.46); forbidSquare[i * 3 + 2] = rand(-1.5, 1.5); } }
+    { const cells = BLOCK_CELLS[PURPLE_PIECE]; for (let i = 0; i < NF; i++) { const c = cells[(Math.random() * cells.length) | 0], w = cellWorld(c[0], c[1]); forbidSquare[i * 3] = w[0] + rand(-CW * 0.46, CW * 0.46); forbidSquare[i * 3 + 1] = w[1] + rand(-CH * 0.46, CH * 0.46); forbidSquare[i * 3 + 2] = rand(-1.5, 1.5); } }
 
     // green hex 'nest' lattice behind the restart orbital — the daemon still ticking behind 'pure me'
     const NB = isMobile ? 700 : 1600;
