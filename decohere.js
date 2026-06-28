@@ -459,6 +459,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
     { const g = sunC.getContext('2d'), grd = g.createRadialGradient(64, 64, 0, 64, 64, 64); grd.addColorStop(0, 'rgba(255,228,176,1)'); grd.addColorStop(0.4, 'rgba(255,184,96,0.5)'); grd.addColorStop(1, 'rgba(255,150,60,0)'); g.fillStyle = grd; g.fillRect(0, 0, 128, 128); }
     const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(sunC), color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
     sun.scale.set(460, 460, 1); sun.position.set(86, 50, -130); scene.add(sun);   // top-right, behind the scene — a sun rising in the corner
+    let sunRise = 0;   // time-eased rise progress (so the sun keeps arcing up while you sit at the ending, not just on scroll)
 
     /* post */
     const composer = new EffectComposer(renderer);
@@ -771,7 +772,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       // bloom + glitch (no camera shake)
       bloom.strength = light ? 0.04 : Math.max(0.12, 0.6 - 0.36 * bootTone - 0.22 * nz - 0.26 * Math.max(0, hexDark - nz) + 0.18 * smoothstep(Re - 0.4, Re, bf) - 0.4 * pp);   // softer bloom at restart + less at boot/panic; dark-hexagon beats (attach+) get the SAME bloom cut as neurotype so the green matches (was: full bloom made the same green look brighter)
       rgb.uniforms.amount.value = pp * (0.006 + vel * 0.006);   // stronger glitch at panic
-      { const rise = smoothstep(Re - 0.8, Re, bf), ang = lerp(-0.95, 0.66, rise); sun.position.x = 12 + Math.cos(ang) * 100; sun.position.y = -22 + Math.sin(ang) * 100; sun.material.opacity = smoothstep(Re - 0.6, Re, bf) * (0.46 + 0.05 * Math.sin(t * 0.6)); }   // the sun ARCS in on an orbit: rises from low-right up into the top-right corner
+      { sunRise += ((restTone > 0.4 ? 1 : 0) - sunRise) * 0.012; const ang = lerp(-0.95, 0.66, sunRise); sun.position.x = 12 + Math.cos(ang) * 100; sun.position.y = -22 + Math.sin(ang) * 100; sun.material.opacity = smoothstep(Re - 0.6, Re, bf) * (0.46 + 0.05 * Math.sin(t * 0.6)); }   // the sun ARCS up on an orbit over time (low-right -> top-right), visibly rising while you're at the ending
 
       // uptime
       if (upEl) { const now = new Date(); let y = now.getFullYear() - 1980; const an = new Date(now.getFullYear(), 1, 18); if (now < an) y--; const base = new Date(now.getFullYear() - (now < an ? 1 : 0), 1, 18); const ms = now - base, dd = Math.floor(ms / 86400000), r = ms - dd * 86400000, hh = Math.floor(r / 3600000), mm = Math.floor(r % 3600000 / 60000), ss = Math.floor(r % 60000 / 1000); upEl.textContent = `uptime ${y}y ${dd}d ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`; }
