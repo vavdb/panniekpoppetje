@@ -292,16 +292,17 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       [[4, 1], [4, 2], [5, 2], [4, 3]],   // L
       [[6, 1], [6, 2], [5, 3], [6, 3]],   // L  (interlocks with the one above)
     ];   // 7 interlocking pieces tile a 7x4 board EXACTLY -> a real filled square (tall cells make it square overall)
-    const PURPLE_PIECE = 1, CW = 6.6, CH = 13.2;
-    const MAIN_PIECES = [0, 2, 3, 4, 5, 6];   // the cloud fills the 6 non-purple pieces; the rain fills the purple one
+    const NTB = BLOCK_CELLS.length, PURPLE_PIECE = 1, CW = 6.6, CH = 13.2;
     const cellWorld = (c) => [(c[0] - 3) * CW, (c[1] - 1.5) * CH];
-    const tBlock = new Uint8Array(N), tetSquare = new Float32Array(N * 3);
+    const tBlock = new Uint8Array(N), tetSquare = new Float32Array(N * 3), Bt = targets.bootstrap;
     for (let i = 0; i < N; i++) {
-      const b = MAIN_PIECES[Math.min(5, (i / N * 6) | 0)]; tBlock[i] = b;
+      const b = Math.min(NTB - 1, (i / N * NTB) | 0); tBlock[i] = b;
       const cells = BLOCK_CELLS[b], c = cells[(Math.random() * cells.length) | 0], w = cellWorld(c);
       tetSquare[i * 3] = w[0] + rand(-CW * 0.46, CW * 0.46);
       tetSquare[i * 3 + 1] = w[1] + rand(-CH * 0.46, CH * 0.46);
       tetSquare[i * 3 + 2] = rand(-1.5, 1.5);
+      // redefine the bootstrap cube the square INFLATES into: same x,y as the square (so it does NOT scatter), only depth restored
+      Bt[i * 3] = tetSquare[i * 3] + rand(-3, 3); Bt[i * 3 + 1] = tetSquare[i * 3 + 1] + rand(-3, 3); Bt[i * 3 + 2] = rand(-20, 20);
     }
     // boot orbital colour map like the hydrogen density plot: orange/yellow in the dense lobe cores -> purple at the thin fringes
     const WHITE = new THREE.Color(1, 1, 1);
@@ -615,6 +616,13 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       } else if (nz > 0.005) {
         for (let i = 0; i < N; i++) { const k3 = i * 3, pz = neuroMask[i]; const tr = pz ? 1.25 : 0.05, tg = pz ? 1.0 : 0.2, tb = pz ? 0.32 : 0.1; cCol[k3] = 1 + (tr - 1) * nz; cCol[k3 + 1] = 1 + (tg - 1) * nz; cCol[k3 + 2] = 1 + (tb - 1) * nz; }   // lobes = bright YELLOW (overdriven), rest = very dim green (does not light up)
         cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
+      } else if (cdStagger) {
+        const asm = smoothstep(0.1, 0.5, f) * (1 - smoothstep(0.72, 0.95, f));   // the anomaly piece glows purple in the assembled square, fades as it diffuses into the cube
+        for (let i = 0; i < N; i++) { const k3 = i * 3;
+          if (tBlock[i] === PURPLE_PIECE) { cCol[k3] = 1; cCol[k3 + 1] = lerp(1, 0.42, asm); cCol[k3 + 2] = lerp(1, 2.2, asm); }   // grey/orange tint * this = violet
+          else { cCol[k3] = 1; cCol[k3 + 1] = 1; cCol[k3 + 2] = 1; }
+        }
+        cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
       } else if (neuroDimmed) { cCol.fill(1); cgeo.attributes.color.needsUpdate = true; neuroDimmed = false; }
 
       // Leydi: heart flies IN from outside the viewport -> FILLED heart -> re-tighten -> EXPLODE (the break)
@@ -691,9 +699,9 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
           const cf = bf - idx.core_dump, gather = smoothstep(0.06, 0.5, cf), dissolve = smoothstep(0.72, 1.0, cf);
           for (let i = 0; i < NF; i++) { const k = i * 3; forbid.pos[k] = lerp(forbid.pos[k], forbidSquare[k], gather); forbid.pos[k + 1] = lerp(forbid.pos[k + 1], forbidSquare[k + 1], gather); forbid.pos[k + 2] = lerp(forbid.pos[k + 2], forbidSquare[k + 2], gather); }
           forbid.g.attributes.position.needsUpdate = true;
-          forbid.m.opacity = gather * (1 - dissolve) * 0.92;
+          forbid.m.opacity = (1 - dissolve) * 0.92;   // stays visible: fallen rain lingers, rises into the block, then dissolves into the cube — no gap
         } else {
-          forbid.m.opacity = smoothstep(0.16, 0.55, appear) * (1 - smoothstep(sx + 1.0, sx + 1.2, bf)) * 0.9;   // visible through the rain, fades only once it has landed
+          forbid.m.opacity = smoothstep(0.16, 0.55, appear) * (1 - smoothstep(idx.core_dump + 0.5, idx.bootstrap, bf)) * 0.9;   // visible through the rain + lingering on the street; only the rebuild branch (above) fades it out
         }
       }
 
@@ -773,12 +781,16 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
         cpuH[MONN - 1] = clampN(load, 2, 99); memH[MONN - 1] = clampN(mem, 3, 98);
         drawMon();
       }
-      // console: every beat's stdout line shown all the time; the active beat is highlighted (+ blinking cursor); the bootstrap line expands into the full build-log as it rebuilds
+      // console: the process log accrues — every beat ALREADY reached is shown (future ones hidden); active line highlighted + blinking cursor; bootstrap expands into the build-log
       if (logLines.length) {
         const cur = (Math.sin(t * 4) > 0) ? ' █' : '';
         const bp = smoothstep(Bs - 0.55, Bs + 0.4, bf) * (1 - smoothstep(Bs + 0.5, Bs + 0.9, bf));
         for (let i = 0; i < logLines.length; i++) {
-          const d = logLines[i], on = (i === active);
+          const d = logLines[i];
+          const show = (i <= active);
+          if (d._show !== show) { d.style.display = show ? '' : 'none'; d._show = show; }
+          if (!show) continue;
+          const on = (i === active);
           if (d._on !== on) { d.classList.toggle('on', on); d._on = on; }
           if (i === idx.bootstrap && bp > 0.02) {
             const shown = Math.floor(smoothstep(Bs - 0.5, Bs + 0.4, bf) * COMPILE.length);
