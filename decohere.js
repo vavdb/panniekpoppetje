@@ -328,6 +328,8 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       tetSquare[i * 3 + 1] = w[1] + rand(-CH * 0.46, CH * 0.46);
       tetSquare[i * 3 + 2] = rand(-1.5, 1.5);
     }
+    // the BUILD beat IS the purple hexagon (no in-between cube): the tetris completes into a flat square, which then SWEEPS straight into the hexagon. So bootstrap target = the hexagon itself; the tetris->hexagon sweep happens during core_dump->bootstrap (see cdStagger). (col/row map above already used the original cube positions.)
+    targets.bootstrap.set(targets.daemon);
     // boot orbital colour map like the hydrogen density plot: orange/yellow in the dense lobe cores -> purple at the thin fringes
     const WHITE = new THREE.Color(1, 1, 1);
     const bootCol = new Float32Array(N * 3);
@@ -495,7 +497,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
     const helixPos = (v, top) => {
       const dir = top > 0 ? -1 : 1, ang = v * Math.PI * 14 * dir;
       const radBase = smoothstep(0, 0.04, v) * (11 + 12 * v);   // COIL radius (the spiral circle) — fixed, not grown
-      const gap = lerp(3, -16, smoothstep(0.96, 1.0, v)), ay = top * lerp(24, radBase + gap, smoothstep(0.05, 0.4, v));
+      const gap = lerp(2, -24, smoothstep(0.62, 1.0, v)), ay = top * lerp(24, radBase + gap, smoothstep(0.05, 0.4, v));   // strands pull together from ~60% along the path -> inner edges (bottom-of-top, top-of-bottom) overlap more, growing toward the tip
       return [-74 + v * 156, ay + Math.sin(ang) * radBase, Math.cos(ang) * radBase];
     };
     let helixFlowT = 0, helixFlowStart = -1;   // flow clock: particles are generated on the LEFT (hydrogen) and flow RIGHT through the hose; starts once the hydrogen scene has STOOD
@@ -592,30 +594,27 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       const bootTone = 1 - smoothstep(idx.boot + 0.15, idx.boot + 0.75, bf);          // orbital colours (white tint + density map) through boot, fade into the grey house
       const nz = smoothstep(Ne - 0.5, Ne - 0.05, bf) * (1 - smoothstep(Ne + 0.05, Ne + 0.6, bf));   // neurotype proximity (drives the puzzle highlight)
       const restTone = smoothstep(Re - 0.7, Re - 0.15, bf);   // restart: hydrogen orbital + orange-strand colours
-      const sweepTone = smoothstep(idx.daemon - 0.5, idx.daemon - 0.05, bf) * (1 - smoothstep(Ne + 0.05, Ne + 0.6, bf));   // green->purple node-sweep: runs daemon -> children -> THROUGH neurotype (under the yellow lobes), fades into panic
+      const sweepTone = smoothstep(Bs - 0.5, Bs - 0.05, bf) * (1 - smoothstep(Ne + 0.05, Ne + 0.6, bf));   // the hexagon is shown from the BUILD beat onward (purple), automation greens it daemon->partner, holds green through neurotype, fades into panic
       const hexDark = smoothstep(A - 0.6, A - 0.1, bf);   // hexagon goes DARK from attach (bind_partner) onward, like the neurotype base — so the purple sweep + family drawing pop (daemon CUBE stays bright: hexDark=0 there)
       // honeycomb crystallisation: only around the daemon beat — the lattice GEOMETRY reorganises as traveling bands of snapped cells flow L->R (cellular-automaton wave), then settles to the static honeycomb by attach
       const dm = idx.daemon, cryst = smoothstep(Bs + 0.4, dm - 0.2, bf) * (1 - smoothstep(dm + 0.25, A - 0.05, bf));
       const t0 = targets[ids[i0]], t1 = targets[ids[i1]];
       const cdStagger = (i0 === idx.core_dump);   // street -> cube: convert particles at staggered times for street/cube overlap
-      const bsToHex = (i0 === idx.bootstrap), bsSweepFront = lerp(-38, 38, ease);   // materialisation plane sweeps L->R across the cube -> behind it the cube has become the green hexagon, ahead it is still the orange cube
+      const cdFront = lerp(-30, 42, smoothstep(0.76, 1.0, f));   // block->hexagon materialisation plane (L->R): runs AFTER the tetris blocks have settled, so the assembled square morphs straight into the (purple) hexagon — no cube. The COLOUR change to purple rides this morph.
       const sxHold = (i0 === idx.syntax_error), sxEase = smoothstep(0.34, 1.0, f);   // hold the complete house briefly (forbidden sits over it) before morphing to the street
       for (let i = 0; i < N; i++) {
         const k = i * 3;
         let x, y, z;
-        if (cdStagger) {   // street gathers into each 4-cell TETROMINO block, which then DROPS into place (staggered, shuffled order), then the filled square diffuses into the cube
+        if (cdStagger) {   // street gathers into each 4-cell TETROMINO block, DROPS into place (staggered), forming a filled square — which then SWEEPS straight into the hexagon (no cube)
           const b = pieceOrder[tBlock[i]];   // shuffled drop slot -> blocks fall one by one in random order, not left->right
           const s0 = 0.05 + b * 0.055;
           const g1 = smoothstep(s0, s0 + 0.16, f);            // street particles GATHER into the 4-cell block shape, floating above the slot
           const g2 = smoothstep(s0 + 0.16, s0 + 0.34, f);     // then the whole block DROPS straight down into its slot (tetris)
-          const p3 = smoothstep(0.80, 1.0, f);                // the filled square then diffuses into the solid cube
+          const pm = smoothstep(cdFront + 9, cdFront - 9, tetSquare[k]);   // tetris-completion -> hexagon plane: 1 behind (hexagon), 0 ahead (still the square)
           const DROP = 64;                                    // block forms this far above its final row, then falls
           const gx = lerp(t0[k], tetSquare[k], g1), gy = lerp(t0[k + 1], tetSquare[k + 1] + DROP, g1), gz = lerp(t0[k + 2], tetSquare[k + 2], g1);
           const dxp = gx, dyp = lerp(gy, tetSquare[k + 1], g2), dzp = gz;   // drop = just the Y falling from spawn to the cell
-          x = lerp(dxp, t1[k], p3); y = lerp(dyp, t1[k + 1], p3); z = lerp(dzp, t1[k + 2], p3);
-        } else if (bsToHex) {   // materialisation sweep: the plane crosses the cube; particles BEHIND it have morphed to the hexagon, ahead still the cube
-          const pm = smoothstep(bsSweepFront + 9, bsSweepFront - 9, t0[k]);   // t0 = cube position; 1 behind the plane (hexagon), 0 ahead (cube)
-          x = lerp(t0[k], t1[k], pm); y = lerp(t0[k + 1], t1[k + 1], pm); z = lerp(t0[k + 2], t1[k + 2], pm);
+          x = lerp(dxp, t1[k], pm); y = lerp(dyp, t1[k + 1], pm); z = lerp(dzp, t1[k + 2], pm);   // the assembled square sweeps into the hexagon
         } else {
           const e = sxHold ? sxEase : ease;
           x = lerp(t0[k], t1[k], e); y = lerp(t0[k + 1], t1[k + 1], e); z = lerp(t0[k + 2], t1[k + 2], e);
@@ -645,7 +644,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       // (panic keeps the hexagon sprites now — the lattice flashes + waves rather than shattering into points)
 
       // tint / bg / mode
-      tmpTint.copy(colOf(VINCENT_TINT, i0)).lerp(colOf(VINCENT_TINT, i1), f); cmat.color.copy(tmpTint).lerp(WHITE, Math.max(bootTone, nz, restTone, smoothstep(0.004, 0.04, sweepTone), smoothstep(0.08, 0.4, pp), bsToHex ? 1 : 0));   // white when per-particle colours drive; sweep uses a near-binary ramp so cmat stays white across the WHOLE sweep (no mid-fade product peak = the green/yellow flash on entering neurotype)
+      tmpTint.copy(colOf(VINCENT_TINT, i0)).lerp(colOf(VINCENT_TINT, i1), f); cmat.color.copy(tmpTint).lerp(WHITE, Math.max(bootTone, nz, restTone, smoothstep(0.004, 0.04, sweepTone), smoothstep(0.08, 0.4, pp), cdStagger ? smoothstep(0.76, 0.9, f) : 0));   // white when per-particle colours drive; sweep uses a near-binary ramp so cmat stays white across the WHOLE sweep (no mid-fade product peak = the green/yellow flash on entering neurotype)
       tmpBg.copy(colOf(BEAT_BG, i0)); nextBg.copy(colOf(BEAT_BG, i1)); tmpBg.lerp(nextBg, f); scene.background.copy(tmpBg);
       const lum = 0.2126 * tmpBg.r + 0.7152 * tmpBg.g + 0.0722 * tmpBg.b, light = lum > 0.32;
       document.body.classList.toggle('lum-light', light); setMode(light);
@@ -663,36 +662,35 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       } else if (restTone > 0.005) {
         for (let i = 0; i < N; i++) { const k3 = i * 3; cCol[k3] = 1 + (restCol[k3] - 1) * restTone; cCol[k3 + 1] = 1 + (restCol[k3 + 1] - 1) * restTone; cCol[k3 + 2] = 1 + (restCol[k3 + 2] - 1) * restTone; }   // strand particles carry their colour the whole way; they're hidden inside the hydrogen until they stream out into the helix
         cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
-      } else if (bsToHex) {   // materialisation sweep colour: ahead of the plane = orange cube, behind = green hexagon (a thin bright edge where the plane is crossing)
-        for (let i = 0; i < N; i++) { const k3 = i * 3;
-          const pm = smoothstep(bsSweepFront + 9, bsSweepFront - 9, targets.bootstrap[k3]);   // same plane as the position morph
-          const edge = (1 - Math.abs(targets.bootstrap[k3] - bsSweepFront) / 9);               // bright leading edge at the plane
-          const eg = edge > 0 ? edge * edge * 0.8 : 0;
-          cCol[k3]     = lerp(0.902, 0.208, pm) + eg;   // orange (0xe67e22) -> green (0x35e06a), + white-ish edge glow
-          cCol[k3 + 1] = lerp(0.494, 0.878, pm) + eg;
-          cCol[k3 + 2] = lerp(0.133, 0.416, pm) + eg;
-        }
-        cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
-      } else if (sweepTone > 0.005) {
-        const sweepAmt = smoothstep(idx.daemon - 0.05, idx.daemon + 0.45, bf);              // purple node-sweep eases in AFTER the daemon centre -> a beat of clean bright-green honeycomb right after the materialisation, then the sweep arrives gently (no abrupt purple line)
+      } else if (sweepTone > 0.005 && !cdStagger) {   // (cdStagger handles its own colour below — the tetris assembly must not be hijacked by the automation sweep)
+        // AUTOMATION: build hexagon starts PURPLE; the normal continually-flowing L->R line-sweep (per-row repeating bands) runs across it, and the base lattice slowly fills GREEN left->right until the whole thing is green by the partner beat
+        const autoProg = smoothstep(idx.daemon, A - 0.1, bf);                               // overall purple -> green progress (0 at daemon, 1 by partner)
         for (let i = 0; i < N; i++) { const k3 = i * 3;
           const row = Math.floor((live[k3 + 1] + 60) / 7);                                  // horizontal row by height
-          const speed = 0.09 + ((row * 7) % 11) * 0.012;                                    // each row sweeps at its OWN speed
-          const band = -56 + ((t * speed + row * 0.17) % 1 + 1) % 1 * 112;
-          const dx = live[k3] - band, pulse = Math.exp(-dx * dx / 130) * sweepAmt;
-          const baseR = lerp(0.21, 0.11, hexDark), baseG = lerp(0.88, 0.46, hexDark), baseB = lerp(0.42, 0.27, hexDark);   // daemon honeycomb = same BRIGHT green as the materialisation ending (no sudden darken at the hand-off); dims toward the partner stage so the purple pops
-          let gr = baseR + (0.78 - baseR) * pulse, gg = baseG + (0.26 - baseG) * pulse, gb = baseB + (1.0 - baseB) * pulse;   // node sweeps to bright purple (pops hard against the dark hexagon)
-          if (nz > 0.005 && neuroMask[i]) { gr = lerp(gr, 1.25, nz); gg = lerp(gg, 1.0, nz); gb = lerp(gb, 0.32, nz); }   // neurotype: the lit lobes glow YELLOW over the still-running purple sweep
-          cCol[k3] = gr; cCol[k3 + 1] = gg; cCol[k3 + 2] = gb; }   // full strength (cmat is held white across the sweep) — no fade-to-white that would brighten mid-handoff
+          const speed = 0.09 + ((row * 7) % 11) * 0.012;                                    // each row flows at its OWN speed
+          const band = -56 + (((t * speed + row * 0.17) % 1) + 1) % 1 * 112;                // continually flowing L->R band (repeats forever)
+          const dx = live[k3] - band, pulse = Math.exp(-dx * dx / 130);                     // the bright flowing line
+          const lr = clamp01((live[k3] + 34) / 68);                                         // 0 = left edge, 1 = right edge
+          const localProg = smoothstep(0, 1, autoProg * 1.5 - lr * 0.5);                    // green fills left->right as automation progresses; all green by autoProg=1
+          const gR = lerp(0.21, 0.11, hexDark), gG = lerp(0.88, 0.46, hexDark), gB = lerp(0.42, 0.27, hexDark);   // GREEN (dims toward partner = less bright / less bloom)
+          const baseR = lerp(0.560, gR, localProg), baseG = lerp(0.300, gG, localProg), baseB = lerp(0.960, gB, localProg);   // base lattice: purple -> green, left->right
+          let gr = baseR + (0.35 - baseR) * pulse, gg = baseG + (1.0 - baseG) * pulse, gb = baseB + (0.5 - baseB) * pulse;   // the flowing line paints bright GREEN over whatever it crosses
+          if (nz > 0.005 && neuroMask[i]) { gr = lerp(gr, 1.25, nz); gg = lerp(gg, 1.0, nz); gb = lerp(gb, 0.32, nz); }   // neurotype: lit lobes glow YELLOW over the green lattice
+          cCol[k3] = gr; cCol[k3 + 1] = gg; cCol[k3 + 2] = gb; }
         cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
       } else if (nz > 0.005) {
         for (let i = 0; i < N; i++) { const k3 = i * 3, pz = neuroMask[i]; const tr = pz ? 1.25 : 0.05, tg = pz ? 1.0 : 0.2, tb = pz ? 0.32 : 0.1; cCol[k3] = 1 + (tr - 1) * nz; cCol[k3 + 1] = 1 + (tg - 1) * nz; cCol[k3 + 2] = 1 + (tb - 1) * nz; }   // lobes = bright YELLOW (overdriven), rest = very dim green (does not light up)
         cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
-      } else if (cdStagger) {
-        const asm = smoothstep(0.1, 0.5, f) * (1 - smoothstep(0.72, 0.95, f));   // the anomaly piece glows purple in the assembled square, fades as it diffuses into the cube
+      } else if (cdStagger) {   // tetris stays UNCHANGED (grey debris -> orange square, with the violet anomaly piece); the colour change to PURPLE rides the block->hexagon morph only
+        const asm = smoothstep(0.1, 0.5, f) * (1 - smoothstep(0.72, 0.95, f));   // anomaly piece violet glow (original timing)
+        const tf = clamp01(f), cr = cmat.color.r, cg = cmat.color.g, cb = cmat.color.b;   // original tetris look = lerp(grey, orange, f); cmat may be forced white during the morph, so drive colour absolutely via cCol = desired / cmat
         for (let i = 0; i < N; i++) { const k3 = i * 3;
-          if (tBlock[i] === PURPLE_PIECE) { cCol[k3] = 1; cCol[k3 + 1] = lerp(1, 0.42, asm); cCol[k3 + 2] = lerp(1, 2.2, asm); }   // grey/orange tint * this = violet
-          else { cCol[k3] = 1; cCol[k3 + 1] = 1; cCol[k3 + 2] = 1; }
+          const pm = smoothstep(cdFront + 9, cdFront - 9, tetSquare[k3]);                        // 1 = morphed into the hexagon (purple), 0 = still the tetris square
+          const crest = Math.exp(-Math.pow(tetSquare[k3] - cdFront, 2) / 80) * smoothstep(0.78, 0.86, f) * (1 - smoothstep(0.96, 1.0, f));   // bright crest riding the morph plane
+          let dr = lerp(0.604, 0.902, tf), dg = lerp(0.604, 0.494, tf), db = lerp(0.635, 0.133, tf);   // ORIGINAL tetris colour (grey 0x9a9aa2 -> orange 0xe67e22)
+          if (tBlock[i] === PURPLE_PIECE) { dg *= lerp(1, 0.42, asm); db *= lerp(1, 2.2, asm); }       // the forbidden-rain anomaly piece glows violet (unchanged)
+          dr = lerp(dr, 0.560, pm) + crest * 0.5; dg = lerp(dg, 0.300, pm) + crest * 0.7; db = lerp(db, 0.960, pm) + crest * 0.5;   // morphed cells -> PURPLE hexagon, with a bright materialisation crest
+          cCol[k3] = dr / Math.max(cr, 0.001); cCol[k3 + 1] = dg / Math.max(cg, 0.001); cCol[k3 + 2] = db / Math.max(cb, 0.001);   // compensate for the material tint so the displayed colour is exactly 'd'
         }
         cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
       } else if (pp > 0.05) {   // kernel panic: lattice points randomly error — flash WHITE then stay RED — accumulating until the whole hexagon is red (cmat is forced white, so cCol IS the colour)
@@ -842,7 +840,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       if (restTone > 0.9) { if (helixFlowStart < 0) helixFlowStart = t; helixFlowT = (t - helixFlowStart) * 0.06; }   // slower flow
       else { helixFlowStart = -1; helixFlowT = 0; }
       if (restTone > 0.005) {
-        const tubeR = 1.0 + 4.0 * smoothstep(0, 1.8, helixFlowT);   // TUBE thickness — starts thin, slowly grows (the hose tube WIDENS, not the coil circle)
+        const tubeR = 1.3 + 5.0 * smoothstep(0, 1.8, helixFlowT);   // TUBE thickness — starts thin, slowly grows (the hose tube WIDENS, not the coil circle); a bit fatter hose
         for (let i = 0; i < NH; i++) {
           const g = i / NH, raw = helixFlowT - g;                 // time since this particle was generated on the left
           const gen = smoothstep(0, 0.02, raw);                   // off until generated, then stays on
