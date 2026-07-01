@@ -257,7 +257,8 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
     const scene = new THREE.Scene(); scene.background = new THREE.Color(BEAT_BG.boot);
     const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 2000); camera.position.set(0, 0, 130);
     // keep the WIDE scenes (orbital at x=-74, helixes to +82) on screen in portrait: pull the camera back so the horizontal extent fits. Desktop (aspect > ~1.15) stays at z=130.
-    const fitCam = () => { const asp = innerWidth / innerHeight; camera.aspect = asp; camera.position.z = Math.max(130, 149 / asp); camera.updateProjectionMatrix(); };
+    let camFitZ = 130;   // the distance that fits the WIDE scenes (restart helix); on portrait this is far back, which makes the centred hexagon tiny — so we zoom IN for the hexagon beats (see frame loop)
+    const fitCam = () => { const asp = innerWidth / innerHeight; camera.aspect = asp; camFitZ = Math.max(130, 149 / asp); camera.position.z = camFitZ; camera.updateProjectionMatrix(); };
     fitCam();
 
     const texHex = makeSprite('hex'), texSpike = makeSprite('spikehex'), texCircle = makeSprite('circle'), texSquare = makeSprite('square'), texHeart = makeSprite('heart'), texSnow = makeSprite('snow'), texStripe = makeSprite('stripe'), texDot = makeSprite('dot');
@@ -577,6 +578,8 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
 
     const measured = new Array(nBeats).fill(false);
     let cloudStriped = false;
+    const greenAmt = new Float32Array(N);   // AUTOMATION: per-cell green fill — the flowing line leaves each cell green and it PERSISTS (monotonic) until the window is left, so the lattice becomes mainly green
+    let autoActive = false;                  // tracks whether we're inside the automation window (to re-arm purple only when entering from the build side)
     const tmpTint = new THREE.Color(), tmpBg = new THREE.Color(), nextBg = new THREE.Color();
     const colOf = (map, i) => new THREE.Color(map[ids[i]] ?? 0x070708);
 
@@ -594,12 +597,13 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       const bootTone = 1 - smoothstep(idx.boot + 0.15, idx.boot + 0.75, bf);          // orbital colours (white tint + density map) through boot, fade into the grey house
       const nz = smoothstep(Ne - 0.5, Ne - 0.05, bf) * (1 - smoothstep(Ne + 0.05, Ne + 0.6, bf));   // neurotype proximity (drives the puzzle highlight)
       const restTone = smoothstep(Re - 0.7, Re - 0.15, bf);   // restart: hydrogen orbital + orange-strand colours
-      const sweepTone = smoothstep(Bs - 0.5, Bs - 0.05, bf) * (1 - smoothstep(Ne + 0.05, Ne + 0.6, bf));   // the hexagon is shown from the BUILD beat onward (purple), automation greens it daemon->partner, holds green through neurotype, fades into panic
+      const sweepTone = smoothstep(Bs - 0.5, Bs - 0.05, bf) * (1 - smoothstep(P - 0.6, P - 0.28, bf));   // the hexagon is shown from the BUILD beat onward (purple); the flowing green sweep stays ACTIVE almost to the kernel panic, then hands off to the red corruption-spread
       const hexDark = smoothstep(A - 0.6, A - 0.1, bf);   // hexagon goes DARK from attach (bind_partner) onward, like the neurotype base — so the purple sweep + family drawing pop (daemon CUBE stays bright: hexDark=0 there)
       // honeycomb crystallisation: only around the daemon beat — the lattice GEOMETRY reorganises as traveling bands of snapped cells flow L->R (cellular-automaton wave), then settles to the static honeycomb by attach
       const dm = idx.daemon, cryst = smoothstep(Bs + 0.4, dm - 0.2, bf) * (1 - smoothstep(dm + 0.25, A - 0.05, bf));
       const t0 = targets[ids[i0]], t1 = targets[ids[i1]];
       const cdStagger = (i0 === idx.core_dump);   // street -> cube: convert particles at staggered times for street/cube overlap
+      if (!(sweepTone > 0.005) || cdStagger) autoActive = false;   // left the automation window -> next entry from the build side re-arms purple
       const cdFront = lerp(-30, 42, smoothstep(0.76, 1.0, f));   // block->hexagon materialisation plane (L->R): runs AFTER the tetris blocks have settled, so the assembled square morphs straight into the (purple) hexagon — no cube. The COLOUR change to purple rides this morph.
       const sxHold = (i0 === idx.syntax_error), sxEase = smoothstep(0.34, 1.0, f);   // hold the complete house briefly (forbidden sits over it) before morphing to the street
       for (let i = 0; i < N; i++) {
@@ -641,6 +645,10 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       cgeo.attributes.position.needsUpdate = true;
       cloud.rotation.y = Math.sin(t * 0.4) * 0.3 * cen * (1 - restartFlow) * (1 - pp) * (1 - smoothstep(P - 0.6, P - 0.2, bf));   // settle -> gentle rotate; rotation fully OFF from just before the panic through the hexagon->hydrogen morph (no spin while it becomes the hydrogen)
       cloud.rotation.x = 0;
+      if (isMobile) {   // MOBILE: the centred hexagon beats (build -> panic) are small + dim from far back; zoom the camera IN for them so the lattice fills the screen and reads clearly. The wide scenes (boot/street/restart) stay at the fit distance.
+        const hexFocus = smoothstep(Bs - 0.6, Bs + 0.2, bf) * (1 - smoothstep(P - 0.1, P + 0.5, bf));
+        camera.position.z = lerp(camFitZ, Math.min(camFitZ, 205), hexFocus);
+      }
       // (panic keeps the hexagon sprites now — the lattice flashes + waves rather than shattering into points)
 
       // tint / bg / mode
@@ -649,11 +657,10 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       const lum = 0.2126 * tmpBg.r + 0.7152 * tmpBg.g + 0.0722 * tmpBg.b, light = lum > 0.32;
       document.body.classList.toggle('lum-light', light); setMode(light);
       cmat.opacity = (light ? 0.85 : 0.9) - (light ? 0.16 : 0.32) * bootTone;          // boot: lower opacity so dense cores stay particle-y (less bloom 'vlek'); visibility is gated per-particle by act
-      const heartFocus = smoothstep(A - 0.4, A, bf) * (1 - smoothstep(Sm - 0.1, Sm + 0.4, bf));   // gentle dim for Venn read
-      cmat.opacity *= (1 - 0.3 * heartFocus);
       cmat.opacity *= (1 - 0.15 * pp);   // panic: keep the flashing lattice fairly bright
       cmat.opacity *= (1 - 0.4 * restTone);   // restart: softer (the hydrogen is the whole cloud now) but still clearly present — not a blinding vlek, not too faint either
-      cmat.size = (isMobile ? 1.7 : 1.5) * (1 - 0.12 * restTone);   // only slightly smaller at restart
+      cmat.size = (isMobile ? 2.9 : 1.5) * (1 - 0.12 * restTone);   // much bigger dots on mobile: only ~4000 particles (vs 13000) so additive blending is faint — fatter dots make the lattice read brighter / more solid; only slightly smaller at restart
+      if (isMobile) cmat.opacity = Math.min(1, cmat.opacity * 1.18);   // and a touch more opaque on mobile
 
       // per-particle cloud colour: boot = hydrogen density map (orange core -> purple fringe); neurotype = dim-green hexagon with an orange puzzle piece
       if (bootTone > 0.005) {
@@ -663,18 +670,21 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
         for (let i = 0; i < N; i++) { const k3 = i * 3; cCol[k3] = 1 + (restCol[k3] - 1) * restTone; cCol[k3 + 1] = 1 + (restCol[k3 + 1] - 1) * restTone; cCol[k3 + 2] = 1 + (restCol[k3 + 2] - 1) * restTone; }   // strand particles carry their colour the whole way; they're hidden inside the hydrogen until they stream out into the helix
         cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
       } else if (sweepTone > 0.005 && !cdStagger) {   // (cdStagger handles its own colour below — the tetris assembly must not be hijacked by the automation sweep)
-        // AUTOMATION: build hexagon starts PURPLE; the normal continually-flowing L->R line-sweep (per-row repeating bands) runs across it, and the base lattice slowly fills GREEN left->right until the whole thing is green by the partner beat
-        const autoProg = smoothstep(idx.daemon, A - 0.1, bf);                               // overall purple -> green progress (0 at daemon, 1 by partner)
+        // BUILD hexagon stays PURPLE; from the daemon (AUTOMATION) onward the continually-flowing L->R line-sweep crosses it and LEAVES each cell green (persists), so the lattice becomes mainly green. Active until the kernel panic.
+        if (!autoActive) { if (bf < idx.daemon + 0.5) greenAmt.fill(0); autoActive = true; }   // re-arm purple only when entering from the build side (not when scrolling back up from the panic)
+        const autoOn = bf > idx.daemon - 0.3;   // the green flow only runs from the daemon onward; the BUILD beat stays a static purple hexagon
         for (let i = 0; i < N; i++) { const k3 = i * 3;
-          const row = Math.floor((live[k3 + 1] + 60) / 7);                                  // horizontal row by height
-          const speed = 0.09 + ((row * 7) % 11) * 0.012;                                    // each row flows at its OWN speed
-          const band = -56 + (((t * speed + row * 0.17) % 1) + 1) % 1 * 112;                // continually flowing L->R band (repeats forever)
-          const dx = live[k3] - band, pulse = Math.exp(-dx * dx / 130);                     // the bright flowing line
-          const lr = clamp01((live[k3] + 34) / 68);                                         // 0 = left edge, 1 = right edge
-          const localProg = smoothstep(0, 1, autoProg * 1.5 - lr * 0.5);                    // green fills left->right as automation progresses; all green by autoProg=1
-          const gR = lerp(0.21, 0.11, hexDark), gG = lerp(0.88, 0.46, hexDark), gB = lerp(0.42, 0.27, hexDark);   // GREEN (dims toward partner = less bright / less bloom)
-          const baseR = lerp(0.560, gR, localProg), baseG = lerp(0.300, gG, localProg), baseB = lerp(0.960, gB, localProg);   // base lattice: purple -> green, left->right
-          let gr = baseR + (0.35 - baseR) * pulse, gg = baseG + (1.0 - baseG) * pulse, gb = baseB + (0.5 - baseB) * pulse;   // the flowing line paints bright GREEN over whatever it crosses
+          let pulse = 0;
+          if (autoOn) {
+            const row = Math.floor((live[k3 + 1] + 60) / 7);                                // horizontal row by height
+            const speed = 0.09 + ((row * 7) % 11) * 0.012;                                  // each row flows at its OWN speed
+            const band = -56 + (((t * speed + row * 0.17) % 1) + 1) % 1 * 112;              // continually flowing L->R band (repeats forever)
+            const dx = live[k3] - band; pulse = Math.exp(-dx * dx / 130);                   // the bright flowing line
+            greenAmt[i] = Math.max(greenAmt[i], pulse);                                     // the line leaves the cell green and it PERSISTS -> becomes mainly green over the passes
+          }
+          const g = autoOn ? greenAmt[i] : 0;                                               // before the daemon the hexagon is always purple (even on scroll-back)
+          const baseR = lerp(0.560, 0.21, g), baseG = lerp(0.300, 0.88, g), baseB = lerp(0.960, 0.42, g);   // PURPLE -> bright GREEN. NO dimming — the partner beat must not change the hexagon.
+          let gr = lerp(baseR, 0.82, pulse), gg = lerp(baseG, 0.55, pulse), gb = lerp(baseB, 1.0, pulse);   // the scan line is bright PURPLE: first pass = the purple->green boundary (leaves green behind); later passes = a purple streak over the green (green->purple->green)
           if (nz > 0.005 && neuroMask[i]) { gr = lerp(gr, 1.25, nz); gg = lerp(gg, 1.0, nz); gb = lerp(gb, 0.32, nz); }   // neurotype: lit lobes glow YELLOW over the green lattice
           cCol[k3] = gr; cCol[k3 + 1] = gg; cCol[k3 + 2] = gb; }
         cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
@@ -693,12 +703,20 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
           cCol[k3] = dr / Math.max(cr, 0.001); cCol[k3 + 1] = dg / Math.max(cg, 0.001); cCol[k3 + 2] = db / Math.max(cb, 0.001);   // compensate for the material tint so the displayed colour is exactly 'd'
         }
         cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
-      } else if (pp > 0.05) {   // kernel panic: lattice points randomly error — flash WHITE then stay RED — accumulating until the whole hexagon is red (cmat is forced white, so cCol IS the colour)
-        const redden = smoothstep(P - 0.62, P - 0.02, bf);   // fraction of points that have errored — ramps to (near) FULLY red BY the panic centre, so the lattice reads red, not half-green
+      } else if (pp > 0.05) {   // kernel panic: the green lattice CORRUPTS to red — a ragged error-front spreads across it, with a glitchy red/white/green stutter behind the front before it locks deep RED (cmat forced white, so cCol IS the colour)
+        const redden = smoothstep(P - 0.3, P + 0.12, bf);   // corruption progress: 0 right as the green sweep hands off -> fully red just past the panic centre
         for (let i = 0; i < N; i++) { const k3 = i * 3, e = hash[i];
-          if (Math.abs(redden - e) < 0.028) { cCol[k3] = 1.15; cCol[k3 + 1] = 1.0; cCol[k3 + 2] = 0.55; }   // brief amber-white SPARK at the instant it errors (narrow + dim so it doesn't bloom the scene white)
-          else if (redden > e) { cCol[k3] = 1.3; cCol[k3 + 1] = 0.06; cCol[k3 + 2] = 0.06; }                // errored -> stays deep saturated RED (R boosted, G/B near zero so additive+bloom reads red, not pink/white)
-          else { cCol[k3] = 0.07; cCol[k3 + 1] = 0.24; cCol[k3 + 2] = 0.15; }                                // not yet errored -> dim green (kept dark so the red dominates the read even mid-cascade)
+          const sx = clamp01((live[k3] + 40) / 80);                                     // 0 = left, 1 = right
+          const d = redden - (0.06 + 0.62 * sx + 0.30 * e);                             // corruption spreads L->R with a hash-jittered RAGGED front (not a clean line, not uniform-random)
+          if (d < -0.03) { cCol[k3] = 0.10; cCol[k3 + 1] = 0.62; cCol[k3 + 2] = 0.30; }   // not yet errored -> still green (carries the lattice colour up to the front)
+          else if (d < 0.03) { cCol[k3] = 1.25; cCol[k3 + 1] = 1.0; cCol[k3 + 2] = 0.5; }  // the erroring front -> amber-white spark
+          else if (d < 0.17) {                                                            // GLITCH zone just behind the front: stutters before locking red
+            const fl = 0.5 + 0.5 * Math.sin(t * 47 + e * 53 + live[k3] * 0.3);
+            if (fl > 0.72) { cCol[k3] = 1.3; cCol[k3 + 1] = 1.1; cCol[k3 + 2] = 1.1; }     // white error flash
+            else if (fl > 0.42) { cCol[k3] = 0.12; cCol[k3 + 1] = 0.6; cCol[k3 + 2] = 0.3; } // green last-gasp flicker
+            else { cCol[k3] = 1.3; cCol[k3 + 1] = 0.06; cCol[k3 + 2] = 0.06; }              // red
+          }
+          else { cCol[k3] = 1.3; cCol[k3 + 1] = 0.06; cCol[k3 + 2] = 0.06; }                // locked deep saturated RED
         }
         cgeo.attributes.color.needsUpdate = true; neuroDimmed = true;
       } else if (neuroDimmed) { cCol.fill(1); cgeo.attributes.color.needsUpdate = true; neuroDimmed = false; }
@@ -857,7 +875,7 @@ const BEAT_BG = { boot: 0x070708, syntax_error: 0x08070a, core_dump: 0x070a0d, b
       helixP.m.opacity = restTone * 0.72;   // softer / smokier
 
       // bloom + glitch (no camera shake)
-      bloom.strength = light ? 0.04 : Math.max(0.12 - 0.07 * pp, 0.6 - 0.36 * bootTone - 0.22 * nz - 0.1 * Math.max(0, hexDark - nz) - 0.18 * restTone - 0.55 * pp);   // panic + restart: trim bloom so neither the red lattice nor the hydrogen blooms into a big white blob (but keep the hydrogen present)
+      bloom.strength = light ? 0.04 : Math.max(0.12 - 0.07 * pp, 0.6 - 0.36 * bootTone - 0.22 * nz - 0.18 * restTone - 0.55 * pp);   // panic + restart: trim bloom so neither the red lattice nor the hydrogen blooms into a big white blob (but keep the hydrogen present). NB: no attach/partner bloom dip — the hexagon must not change at the partner step.
       rgb.uniforms.amount.value = pp * vel * 0.007;   // RGB-shift glitch ONLY while actively scrolling through the panic — when you dwell it goes to ~0 so the hexagon reads as a clean RED shape, not red/blue split stripes
       { sunRise += ((restTone > 0.4 ? 1 : 0) - sunRise) * 0.012; const ang = lerp(-0.95, 0.66, sunRise), op = smoothstep(Re - 0.6, Re, bf), pulse = 1 + 0.06 * Math.sin(t * 0.6);
         const orbX = Math.cos(t * 0.07) * 28 * sunRise, orbY = Math.sin(t * 0.07) * 20 * sunRise;   // the sun ORBITS slowly along an ellipse around its risen position
